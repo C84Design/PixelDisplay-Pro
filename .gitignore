@@ -1,0 +1,37 @@
+# Build directories
+build/
+build-*/
+cmake-build-*/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+!cmake/*.cmake
+Makefile
+
+# Compiled artifacts
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.aex
+*.plugin
+*.exe
+
+# IDE / OS
+.vs/
+.idea/
+.vscode/
+.DS_Store
+*.user
+xcuserdata/
+
+# Shader build intermediates
+*.metallib
+*.dxil
+*.spv
