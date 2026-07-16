@@ -34,21 +34,26 @@ else()
     target_compile_options(pdengine PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-# ---- GPU backends (added in later milestones; scaffolding gated here) ------
+# ---- GPU backends (M9) -----------------------------------------------------
+# Built only on their platforms. NOT compiled/validated in the Linux CI; see
+# Documentation/GPU_PIPELINE.md. The engine facade references the factories only
+# under these definitions, so a build without them uses the CPU reference.
 if(PD_WITH_METAL AND APPLE)
     target_compile_definitions(pdengine PUBLIC PD_WITH_METAL=1)
-    # Metal sources (.mm) and shader compilation are wired up in Milestone 2/9.
-    # target_sources(pdengine PRIVATE Renderer/GPU/Metal/MetalBackend.mm)
-    # target_link_libraries(pdengine PUBLIC "-framework Metal" "-framework Foundation")
+    target_sources(pdengine PRIVATE Renderer/GPU/Metal/MetalBackend.mm)
+    target_link_libraries(pdengine PUBLIC "-framework Metal" "-framework Foundation")
+    # Compile the .metal shader into a default.metallib packaged with the plugin.
+    set_source_files_properties(Renderer/GPU/Shaders/PixelDisplay.metal
+                                PROPERTIES LANGUAGE METAL)
 endif()
 if(PD_WITH_D3D12 AND WIN32)
     target_compile_definitions(pdengine PUBLIC PD_WITH_D3D12=1)
-    # target_sources(pdengine PRIVATE Renderer/GPU/D3D12/D3D12Backend.cpp)
-    # target_link_libraries(pdengine PUBLIC d3d12 dxgi dxguid)
+    target_sources(pdengine PRIVATE Renderer/GPU/D3D12/D3D12Backend.cpp)
+    target_link_libraries(pdengine PUBLIC d3d12 dxgi dxguid)
 endif()
 if(PD_WITH_OPENGL)
     target_compile_definitions(pdengine PUBLIC PD_WITH_OPENGL=1)
-    # target_sources(pdengine PRIVATE Renderer/GPU/OpenGL/OpenGLBackend.cpp)
+    target_sources(pdengine PRIVATE Renderer/GPU/OpenGL/OpenGLBackend.cpp)
 endif()
 
 add_library(PixelDisplay::Engine ALIAS pdengine)

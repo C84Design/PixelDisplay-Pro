@@ -13,7 +13,7 @@ Each milestone must compile and pass tests before the next begins
 | 6 | Burn-in simulation | ✅ Complete |
 | 7 | Rolling shutter + temporal | ✅ Complete |
 | 8 | Lens simulation | ✅ Complete |
-| 9 | GPU optimization (Metal, then D3D12/GL) | ⬜ Planned |
+| 9 | GPU optimization (Metal, then D3D12/GL) | ✅ CPU parts verified; GPU written, on-device pending |
 | 10 | UI polish | ⬜ Planned |
 | 11 | Preset system | ⬜ Planned |
 | 12 | Documentation | ⬜ Planned |
@@ -44,6 +44,28 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 9 — GPU optimization (CPU parts verified; GPU on-device pending)
+
+**Verified in this environment (CPU)**
+- `ResourceCache`: compiled frame graphs memoized by topology key; identical
+  configurations reuse an immutable `shared_ptr<const FrameGraph>` (safe to
+  execute from many threads). The mechanism that will also cache GPU PSOs / LUTs
+  / masks (DESIGN.md §9.3).
+- CPU fallback path: a GPU backend that hits device loss or an unported stage
+  transparently falls back to the CPU reference (DESIGN.md §6.4).
+
+**Written, validated on-device only (NOT built in Linux CI — see GPU_PIPELINE.md)**
+- Metal backend (`MetalBackend.mm`) + `PixelDisplay.metal`: device/queue/pipeline
+  setup, texture upload/download, per-stage compute dispatch; synthesis + encode
+  kernels mirror the CPU math. Remaining stages follow the same mirror pattern.
+- D3D12 and OpenGL backend skeletons with documented completion path; factories
+  return `nullptr` until their kernels pass the golden-image parity suite, so
+  `Auto` stays on the CPU reference and never emits silently-partial GPU output.
+
+**Verification**
+- `pdtests`: 39/39. Adds cache-reuse (one compile per topology) and GPU→CPU
+  fallback (matches a pure-CPU render). Clean under ASan + UBSan.
 
 ## Milestone 8 — Lens simulation (complete)
 

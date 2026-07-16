@@ -10,84 +10,100 @@
 
 namespace pd {
 
-// Milestone 1 builds an empty graph (passthrough). Subsequent milestones append
-// concrete stages here as they come online:
-//   M2: Synthesis        M4: ColorEncode
-//   M5: Imperfections    M6: burn-in (Temporal)
-//   M7: rolling shutter  M8: Optics
-// The topology hash folds in which stages were added so equal configs share a
-// compiled graph via the ResourceCache.
-FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
-    FrameGraph g;
-    std::uint64_t hash = 1469598103934665603ull;  // FNV-1a offset basis
-    auto mix = [&hash](std::uint64_t v) {
-        hash ^= v;
-        hash *= 1099511628211ull;
-    };
+namespace {
 
-    if (params.isPassthrough()) {
-        g.topologyHash_ = hash;  // empty graph
-        return g;
-    }
+// Which optional stages a snapshot activates. The synthesis and color-encode
+// stages are always present for a non-passthrough render; the rest are gated by
+// their feature groups so the graph stays minimal for cheap looks.
+struct Enabled {
+    bool synthesis = false;
+    bool imperfections = false;
+    bool burnIn = false;
+    bool temporal = false;
+    bool optics = false;
+    // Value bits that change stage *behaviour selection* (not just on/off).
+    std::uint64_t displayType = 0;
+    std::uint64_t outputSpace = 0;
+    bool subpixels = false;
+    bool linearWorkflow = true;
+};
 
-    // Milestone 2: the fused synthesis stage (resample + linear + emitter).
-    mix(static_cast<std::uint64_t>(params.displayType));
-    g.stages_.push_back(std::make_unique<stages::SynthesisStage>());
+Enabled analyze(const ParamSnapshot& p) {
+    Enabled e;
+    if (p.isPassthrough()) return e;
+    e.synthesis = true;
+    e.displayType = static_cast<std::uint64_t>(p.displayType);
+    e.subpixels = p.subpixel.enable;
+    e.outputSpace = static_cast<std::uint64_t>(p.color.outputSpace);
+    e.linearWorkflow = p.color.linearWorkflow;
 
-    mix(static_cast<std::uint64_t>(params.subpixel.enable));
-
-    // Imperfections (M5): appended only when at least one artifact is active, so
-    // the graph stays minimal for clean looks.
-    const ArtifactParams& a = params.artifacts;
-    const DisplayCharacteristics& ch = params.characteristics;
-    const bool anyImperfection =
+    const ArtifactParams& a = p.artifacts;
+    const DisplayCharacteristics& ch = p.characteristics;
+    e.imperfections =
         a.deadPixelCount || a.stuckPixelCount || a.hotPixelCount || a.mura > 0 ||
         a.panelUniformity > 0 || a.brightnessDrift > 0 || a.columnDefects > 0 ||
         a.rowDefects > 0 || a.banding > 0 || a.dust > 0 || a.hair > 0 ||
         a.microScratches > 0 || a.fingerprints > 0 || a.pressureMarks > 0 ||
         a.lightLeakage > 0 || a.vignetting > 0 || ch.backlightBleed > 0 ||
         ch.blackLevel > 0;
-    if (anyImperfection) {
-        mix(0x9151u);
-        g.stages_.push_back(std::make_unique<stages::ImperfectionsStage>());
-    }
 
-    // Burn-in (M6): closed-form in time, so still MFR-safe.
-    if (params.burnIn.enable) {
-        mix(0xB021u);
-        g.stages_.push_back(std::make_unique<stages::BurnInStage>());
-    }
+    e.burnIn = p.burnIn.enable;
 
-    // Temporal / animation + camera rolling shutter (M7). All closed-form in
-    // frame time/index, so MFR-safe.
-    const AnimationParams& an = params.animation;
-    const LensParams& ln = params.lens;
-    const bool anyTemporal =
+    const AnimationParams& an = p.animation;
+    const LensParams& ln = p.lens;
+    e.temporal =
         an.scanlineOpacity > 0 || an.rollingRefreshEnable || an.pwmIntensity > 0 ||
         an.randomFlicker > 0 || an.pixelTwinkle > 0 || an.temporalNoise > 0 ||
         an.pixelWarmUp > 0 || (ln.rollingShutterEnable && ln.readoutTimeMs > 0);
-    if (anyTemporal) {
-        mix(0x7E3Fu);
-        g.stages_.push_back(std::make_unique<stages::TemporalStage>());
-    }
 
-    // Optics (M8): lens/camera glass effects, in scene-linear before encode.
-    const bool anyOptics =
+    e.optics =
         ch.glowIntensity > 0 || ch.bloomIntensity > 0 || ln.lensBlur > 0 ||
         ln.cameraDefocus > 0 || ln.chromaticAberration > 0 || ln.screenCurvature > 0 ||
         ln.refraction > 0 || ln.reflection > 0 || ln.moire > 0 || ln.polarizer > 0 ||
         ln.antiReflectiveCoating > 0;
-    if (anyOptics) {
-        mix(0x0971Cu);
-        g.stages_.push_back(std::make_unique<stages::OpticsStage>());
-    }
+    return e;
+}
 
-    // Final stage: linear -> output gamut/transfer (DESIGN.md §4 step 12).
-    mix(static_cast<std::uint64_t>(params.color.outputSpace));
-    mix(static_cast<std::uint64_t>(params.color.linearWorkflow));
-    g.stages_.push_back(std::make_unique<stages::ColorEncodeStage>());
+std::uint64_t hashEnabled(const Enabled& e) {
+    std::uint64_t hash = 1469598103934665603ull;  // FNV-1a
+    auto mix = [&hash](std::uint64_t v) { hash ^= v; hash *= 1099511628211ull; };
+    mix(e.synthesis);
+    mix(e.displayType);
+    mix(e.subpixels);
+    mix(e.imperfections);
+    mix(e.burnIn);
+    mix(e.temporal);
+    mix(e.optics);
+    mix(e.outputSpace);
+    mix(e.linearWorkflow);
+    return hash;
+}
 
-    g.topologyHash_ = hash;
+}  // namespace
+
+// Topology key computed WITHOUT allocating stages, so the engine can cache
+// compiled graphs by this key (identical topology => reuse). A compiled graph
+// reads all parameter *values* live from the RenderContext, so it is valid for
+// any snapshot sharing this topology.
+std::uint64_t FrameGraph::topologyKey(const ParamSnapshot& params) {
+    return hashEnabled(analyze(params));
+}
+
+FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
+    FrameGraph g;
+    const Enabled e = analyze(params);
+    g.topologyHash_ = hashEnabled(e);
+
+    if (!e.synthesis) return g;  // passthrough: empty graph
+
+    // Pipeline order (all intermediate stages operate in scene-linear):
+    g.stages_.push_back(std::make_unique<stages::SynthesisStage>());   // steps 3–8
+    if (e.imperfections) g.stages_.push_back(std::make_unique<stages::ImperfectionsStage>());  // 9
+    if (e.burnIn)        g.stages_.push_back(std::make_unique<stages::BurnInStage>());          // 10
+    if (e.temporal)      g.stages_.push_back(std::make_unique<stages::TemporalStage>());        // 10
+    if (e.optics)        g.stages_.push_back(std::make_unique<stages::OpticsStage>());          // 11
+    g.stages_.push_back(std::make_unique<stages::ColorEncodeStage>());  // step 12
+
     return g;
 }
 

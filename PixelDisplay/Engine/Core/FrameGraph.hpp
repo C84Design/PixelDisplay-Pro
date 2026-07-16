@@ -23,6 +23,10 @@ public:
     /// Build the stage list for a snapshot. Empty when the effect is passthrough.
     static FrameGraph compile(const ParamSnapshot& params);
 
+    /// Topology key for a snapshot, computed without allocating stages. Two
+    /// snapshots with the same key share a compiled graph (see ResourceCache).
+    static std::uint64_t topologyKey(const ParamSnapshot& params);
+
     const std::vector<std::unique_ptr<Stage>>& stages() const { return stages_; }
     bool empty() const { return stages_.empty(); }
 

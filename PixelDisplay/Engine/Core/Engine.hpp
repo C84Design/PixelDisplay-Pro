@@ -13,6 +13,7 @@
 #include "Engine/Core/FrameGraph.hpp"
 #include "Engine/Core/ParamSnapshot.hpp"
 #include "Engine/Core/RenderContext.hpp"
+#include "Engine/Core/ResourceCache.hpp"
 #include "Engine/Core/Types.hpp"
 #include "Engine/Renderer/Backend.hpp"
 #include "Engine/Utilities/Result.hpp"
@@ -48,6 +49,12 @@ public:
     /// Construct an engine, selecting and initializing a backend.
     static Result<std::unique_ptr<Engine>> create(const EngineConfig& config = {});
 
+    /// Test/advanced hook: construct with an explicit primary backend and an
+    /// optional CPU-reference fallback used on GPU device-loss / unsupported
+    /// stages. Ownership is transferred.
+    static Result<std::unique_ptr<Engine>> createWithBackends(
+        std::unique_ptr<Backend> primary, std::unique_ptr<Backend> fallback);
+
     ~Engine();
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
@@ -58,12 +65,16 @@ public:
     const char* activeBackendName() const;
     BackendCaps activeBackendCaps() const;
 
+    /// Number of distinct frame graphs compiled so far (cache misses). Repeated
+    /// renders with the same topology reuse a cached graph. For diagnostics.
+    std::uint64_t compiledGraphCount() const;
+
 private:
     Engine() = default;
 
-    std::unique_ptr<Backend> backend_;
-    // FrameGraph compilation is cheap and currently per-call; the ResourceCache
-    // (M2+) will memoize compiled graphs and procedural geometry by param hash.
+    std::unique_ptr<Backend> backend_;   // primary (may be GPU)
+    std::unique_ptr<Backend> fallback_;  // CPU reference used on GPU failure
+    ResourceCache cache_;  // memoizes compiled graphs (and, later, GPU resources)
 };
 
 }  // namespace pd
