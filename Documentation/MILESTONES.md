@@ -10,7 +10,7 @@ Each milestone must compile and pass tests before the next begins
 | 3 | Subpixel layouts | ✅ Complete |
 | 4 | Color pipeline | ✅ Complete |
 | 5 | Display artifacts | ✅ Complete |
-| 6 | Burn-in simulation | ⬜ Planned |
+| 6 | Burn-in simulation | ✅ Complete |
 | 7 | Rolling shutter | ⬜ Planned |
 | 8 | Lens simulation | ⬜ Planned |
 | 9 | GPU optimization (Metal, then D3D12/GL) | ⬜ Planned |
@@ -44,6 +44,23 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 6 — Burn-in simulation (complete)
+
+**Delivered** (`BurnInStage` + `Artifacts/BurnInModel.hpp`)
+- Closed-form burn-in `intensity·aging(age)·wear(x)·growth(t)·(1−recovery)` —
+  no accumulator, so every frame is independent and MFR-safe (DESIGN.md §12).
+- Wear map sources with priority: imported grayscale mask → analytic preset
+  regions (logo / status bar / window / taskbar) → content-luminance proxy.
+- Differential-aging dimming of worn emitters + a faint persistent ghost
+  (ghosting control) visible even on black content.
+- Image persistence / retention trail. Effect intensifies with layer time.
+
+**Verification**
+- `pdtests`: 28/28. Confirms a status-bar ghost on black, intensification over
+  time, custom-mask spatial control, and closed-form determinism (equal time =>
+  identical output across 8 threads).
+- Clean under ASan + UBSan.
 
 ## Milestone 5 — Display artifacts (complete)
 

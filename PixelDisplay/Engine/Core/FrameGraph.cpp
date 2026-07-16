@@ -1,6 +1,7 @@
 // PixelDisplay Pro — Engine/Core/FrameGraph.cpp
 #include "Engine/Core/FrameGraph.hpp"
 
+#include "Engine/Renderer/Stages/BurnInStage.hpp"
 #include "Engine/Renderer/Stages/ColorEncodeStage.hpp"
 #include "Engine/Renderer/Stages/ImperfectionsStage.hpp"
 #include "Engine/Renderer/Stages/SynthesisStage.hpp"
@@ -49,8 +50,14 @@ FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
         g.stages_.push_back(std::make_unique<stages::ImperfectionsStage>());
     }
 
-    // Later milestones insert Temporal/burn-in (M6/M7) and Optics (M8) here —
-    // all operating in scene-linear.
+    // Burn-in (M6): closed-form in time, so still MFR-safe.
+    if (params.burnIn.enable) {
+        mix(0xB021u);
+        g.stages_.push_back(std::make_unique<stages::BurnInStage>());
+    }
+
+    // Later milestones insert rolling shutter (M7) and Optics (M8) here — all
+    // operating in scene-linear.
 
     // Final stage: linear -> output gamut/transfer (DESIGN.md §4 step 12).
     mix(static_cast<std::uint64_t>(params.color.outputSpace));
