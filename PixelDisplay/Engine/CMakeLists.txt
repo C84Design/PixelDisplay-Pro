@@ -14,6 +14,7 @@ add_library(pdengine STATIC
     Renderer/Stages/ImperfectionsStage.cpp
     Renderer/Stages/BurnInStage.cpp
     Renderer/Stages/TemporalStage.cpp
+    Renderer/Stages/OpticsStage.cpp
 )
 
 target_include_directories(pdengine PUBLIC

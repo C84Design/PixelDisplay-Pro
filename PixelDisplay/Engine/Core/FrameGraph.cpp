@@ -4,6 +4,7 @@
 #include "Engine/Renderer/Stages/BurnInStage.hpp"
 #include "Engine/Renderer/Stages/ColorEncodeStage.hpp"
 #include "Engine/Renderer/Stages/ImperfectionsStage.hpp"
+#include "Engine/Renderer/Stages/OpticsStage.hpp"
 #include "Engine/Renderer/Stages/SynthesisStage.hpp"
 #include "Engine/Renderer/Stages/TemporalStage.hpp"
 
@@ -70,7 +71,16 @@ FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
         g.stages_.push_back(std::make_unique<stages::TemporalStage>());
     }
 
-    // Milestone 8 inserts Optics here — operating in scene-linear.
+    // Optics (M8): lens/camera glass effects, in scene-linear before encode.
+    const bool anyOptics =
+        ch.glowIntensity > 0 || ch.bloomIntensity > 0 || ln.lensBlur > 0 ||
+        ln.cameraDefocus > 0 || ln.chromaticAberration > 0 || ln.screenCurvature > 0 ||
+        ln.refraction > 0 || ln.reflection > 0 || ln.moire > 0 || ln.polarizer > 0 ||
+        ln.antiReflectiveCoating > 0;
+    if (anyOptics) {
+        mix(0x0971Cu);
+        g.stages_.push_back(std::make_unique<stages::OpticsStage>());
+    }
 
     // Final stage: linear -> output gamut/transfer (DESIGN.md §4 step 12).
     mix(static_cast<std::uint64_t>(params.color.outputSpace));

@@ -12,7 +12,7 @@ Each milestone must compile and pass tests before the next begins
 | 5 | Display artifacts | ✅ Complete |
 | 6 | Burn-in simulation | ✅ Complete |
 | 7 | Rolling shutter + temporal | ✅ Complete |
-| 8 | Lens simulation | ⬜ Planned |
+| 8 | Lens simulation | ✅ Complete |
 | 9 | GPU optimization (Metal, then D3D12/GL) | ⬜ Planned |
 | 10 | UI polish | ⬜ Planned |
 | 11 | Preset system | ⬜ Planned |
@@ -44,6 +44,24 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 8 — Lens simulation (complete)
+
+**Delivered** (`OpticsStage` + `Lens/Blur.hpp`, scene-linear, before encode)
+- Separable Gaussian blur used by glow, bloom, lens blur and camera defocus.
+- Bloom (threshold → blur → add), pixel glow (soft halo), lens blur, defocus.
+- Geometric pass: screen curvature (barrel), lens chromatic aberration
+  (per-channel radial scale), refraction/glass ghost.
+- Overlays: moiré beat, display reflection, polarizer darkening, anti-reflective
+  coating tint.
+
+**Verification**
+- `pdtests`: 37/37. Confirms glow spreads light (and does not when off), defocus
+  blurs a hard edge, curvature changes the image, and the full optics stack is
+  MFR-safe across 8 threads.
+- Clean under ASan + UBSan.
+- Visual montage (glow / bloom / defocus / curvature+CA / reflection / moiré)
+  inspected.
 
 ## Milestone 7 — Rolling shutter + temporal animation (complete)
 
