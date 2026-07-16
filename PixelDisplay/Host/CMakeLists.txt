@@ -14,6 +14,9 @@ target_include_directories(pdhostcore PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(pdhostcore PUBLIC pdengine)
 target_compile_features(pdhostcore PUBLIC cxx_std_20)
 
+# Linked into the shared-module AE plugin, so build position-independent.
+set_target_properties(pdhostcore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 if(MSVC)
     target_compile_options(pdhostcore PRIVATE /W4)
 else()

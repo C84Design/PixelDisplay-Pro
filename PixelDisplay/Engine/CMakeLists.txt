@@ -23,6 +23,10 @@ target_include_directories(pdengine PUBLIC
 
 target_compile_features(pdengine PUBLIC cxx_std_20)
 
+# The engine is linked into the After Effects plugin, which is a shared module,
+# so its objects must be position-independent (also harmless for the test exe).
+set_target_properties(pdengine PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # Threading for the CPU backend's thread pool.
 find_package(Threads REQUIRED)
 target_link_libraries(pdengine PUBLIC Threads::Threads)
