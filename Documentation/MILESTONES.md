@@ -45,6 +45,31 @@ Each milestone must compile and pass tests before the next begins
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
 
+## After Effects plugin — complete
+
+The `PixelDisplayPro` target is a full AE effect built on the completed engine:
+
+- **Registration & menu**: PiPL resource (`PixelDisplayPro_PiPL.r`) with match-name,
+  per-arch `EffectMain` code entries, spec/effect version, and out-flags matched
+  to `GlobalSetup()`. Appears under `PixelDisplay ▸ PixelDisplay Pro`.
+- **Passthrough**: default parameters ("Enable" off) → engine bit-exact copy.
+- **Full parameter surface**: every catalog control is read into a `ParamSnapshot`
+  each render (via the shared serializer field-map) and drives the engine; the
+  Refresh-Rate popup maps its index to real Hz.
+- **SmartFX + MFR**: `SMART_PRE_RENDER` flattens params into `pre_render_data`;
+  `SMART_RENDER` runs the engine per worker thread; About + GlobalSetdown wired.
+- **Interactivity**: `USER_CHANGED_PARAM` applies the 20-preset popup and the
+  Reset / Reset-Category / Randomize buttons by writing parameter values (reusing
+  the preset library); Copy/Paste/Import/Export are host-UI/file-suite tasks left
+  as documented no-ops.
+- **Build**: CMake compiles/embeds the PiPL (Rez on macOS → `.plugin`; PiPLtool on
+  Windows → `.aex`) and links the engine + host-core.
+
+**Verification** (no Adobe SDK in this environment — the real `.aex`/`.plugin`
+link happens on macOS/Windows): compiles against stub SDK headers; the plugin
+module links with `EffectMain` exported; the PiPL preprocesses cleanly on both
+the macOS and Windows branches; engine + host-core + 45 tests pass.
+
 ## Milestone 12 — Documentation (complete)
 
 Full documentation set, cross-linked from [README.md](README.md):

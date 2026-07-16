@@ -18,11 +18,13 @@
 #include "AEGP_SuiteHandler.h"
 #include "entry.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <new>
 #include <string>
+#include <unordered_map>
 
 #include "Engine/Core/Engine.hpp"
 #include "Host/AfterEffects/Parameters/ParameterCatalog.hpp"
@@ -39,6 +41,17 @@ constexpr A_long PARAM_INPUT = 0;
 // One shared engine per plugin instance. Immutable after creation; render() is
 // thread-safe, so all MFR worker threads share it (DESIGN.md §10.3).
 std::unique_ptr<Engine> gEngine;
+
+// The Refresh Rate popup shows Hz values but the engine stores actual Hz, so the
+// popup index and the stored value differ; these map between them.
+const double kRefreshHz[8] = {24, 30, 60, 90, 120, 144, 165, 240};
+double refreshHzFromIndex(int i) { return kRefreshHz[(i < 0 || i > 7) ? 2 : i]; }
+int refreshIndexFromHz(double hz) {
+    int best = 2; double bd = 1e18;
+    for (int i = 0; i < 8; ++i) { double d = std::fabs(hz - kRefreshHz[i]); if (d < bd) { bd = d; best = i; } }
+    return best;
+}
+A_u_char to255(float f) { f = f < 0 ? 0 : (f > 1 ? 1 : f); return (A_u_char)(f * 255.0f + 0.5f); }
 
 // ---- Setup -----------------------------------------------------------------
 
@@ -95,13 +108,26 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
                 PF_ADD_CHECKBOX(p.label.c_str(), "", (A_long)p.defaultValue != 0, 0, 0);
                 break;
             case host::ParamType::Enum: {
-                std::string menu;
-                for (std::size_t i = 0; i < p.options.size(); ++i) {
-                    if (i) menu += "|";
-                    menu += p.options[i].label;
+                if (p.id == "preset.select") {
+                    // The preset popup is filled from the preset library and is
+                    // supervised so selecting one applies it (USER_CHANGED_PARAM).
+                    std::string menu = "(none)";
+                    for (int k = 0; k < (int)host::PresetId::Count; ++k) {
+                        menu += "|";
+                        menu += host::presetName((host::PresetId)k);
+                    }
+                    def.flags = PF_ParamFlag_SUPERVISE;
+                    PF_ADD_POPUP(p.label.c_str(), (A_long)host::PresetId::Count + 1,
+                                 1, menu.c_str(), 0);
+                } else {
+                    std::string menu;
+                    for (std::size_t i = 0; i < p.options.size(); ++i) {
+                        if (i) menu += "|";
+                        menu += p.options[i].label;
+                    }
+                    PF_ADD_POPUP(p.label.c_str(), (A_long)p.options.size(),
+                                 (A_long)p.defaultValue + 1, menu.c_str(), 0);
                 }
-                PF_ADD_POPUP(p.label.c_str(), (A_long)p.options.size(),
-                             (A_long)p.defaultValue + 1, menu.c_str(), 0);
                 break;
             }
             case host::ParamType::Color:  PF_ADD_COLOR(p.label.c_str(), 0, 0, 0, 0); break;
@@ -181,7 +207,12 @@ ParamSnapshot buildSnapshot(PF_InData* in_data) {
             case host::ParamType::Bool:  value = def.u.bd.value ? 1.0 : 0.0; break;
             case host::ParamType::Float: value = (double)def.u.fs_d.value; break;
             case host::ParamType::Int:   value = (double)def.u.sd.value; break;
-            case host::ParamType::Enum:  value = (double)(def.u.pd.value - 1); break;  // 0-based
+            case host::ParamType::Enum:
+                value = (double)(def.u.pd.value - 1);  // popup is 1-based
+                // Most enums store the index directly (it equals the engine enum
+                // value); the Refresh Rate popup stores an actual Hz value.
+                if (p.id == "anim.refreshRateHz") value = refreshHzFromIndex((int)value);
+                break;
             case host::ParamType::Color:
                 deadR = def.u.cd.value.red   / 255.0f;
                 deadG = def.u.cd.value.green / 255.0f;
@@ -205,6 +236,97 @@ ParamSnapshot buildSnapshot(PF_InData* in_data) {
         snap.artifacts.deadPixelColor.z = deadB;
     }
     return snap;
+}
+
+// ---- Preset / utility interactions -----------------------------------------
+
+// Push a snapshot's values back into the AE parameter array (the reverse of
+// buildSnapshot), marking each changed so the host updates the UI. Reuses the
+// preset serializer for the field mapping. When `onlyGroup` is set, only that
+// group's controls are written (used by "Reset Current Category").
+void applyParamsFromSnapshot(PF_ParamDef* params[], const ParamSnapshot& snap,
+                             const host::Group* onlyGroup = nullptr) {
+    // Flatten the snapshot to key=value, then index it.
+    std::string text = host::serialize(snap);
+    std::unordered_map<std::string, double> kv;
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        std::size_t nl = text.find('\n', pos);
+        std::string ln = text.substr(pos, nl == std::string::npos ? std::string::npos : nl - pos);
+        pos = (nl == std::string::npos) ? text.size() : nl + 1;
+        std::size_t eq = ln.find('=');
+        if (eq == std::string::npos) continue;
+        try { kv[ln.substr(0, eq)] = std::stod(ln.substr(eq + 1)); } catch (...) {}
+    }
+
+    const auto& cat = host::catalog();
+    for (std::size_t i = 0; i < cat.size(); ++i) {
+        const host::ParamInfo& p = cat[i];
+        if (p.type == host::ParamType::Button || p.type == host::ParamType::Group) continue;
+        if (p.id == "preset.select") continue;                 // don't clobber the selector
+        if (onlyGroup && p.group != *onlyGroup) continue;
+
+        PF_ParamDef* pd = params[i + 1];
+        auto it = kv.find(p.id);
+        switch (p.type) {
+            case host::ParamType::Bool:
+                if (it != kv.end()) pd->u.bd.value = (it->second != 0.0);
+                break;
+            case host::ParamType::Float:
+                if (it != kv.end()) pd->u.fs_d.value = it->second;
+                break;
+            case host::ParamType::Int:
+                if (it != kv.end()) pd->u.sd.value = (A_long)(it->second + 0.5);
+                break;
+            case host::ParamType::Enum:
+                if (it != kv.end()) {
+                    int idx = (p.id == "anim.refreshRateHz")
+                                  ? refreshIndexFromHz(it->second)
+                                  : (int)(it->second + 0.5);
+                    pd->u.pd.value = idx + 1;                  // popup is 1-based
+                }
+                break;
+            case host::ParamType::Color:
+                pd->u.cd.value.alpha = 255;
+                pd->u.cd.value.red   = to255(snap.artifacts.deadPixelColor.x);
+                pd->u.cd.value.green = to255(snap.artifacts.deadPixelColor.y);
+                pd->u.cd.value.blue  = to255(snap.artifacts.deadPixelColor.z);
+                break;
+            default: continue;
+        }
+        pd->uu.change_flags |= PF_ChangeFlag_CHANGED_VALUE;
+    }
+}
+
+// UserChangedParam: responds to the supervised controls — preset selection and
+// the reset / randomize utility buttons — by writing new parameter values.
+PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
+                        const PF_UserChangedParamExtra* extra) {
+    const auto& cat = host::catalog();
+    const A_long idx = extra->param_index;   // 1-based (index 0 is the input layer)
+    const std::size_t ci = (std::size_t)(idx - 1);
+    if (idx < 1 || ci >= cat.size()) return PF_Err_NONE;
+    const std::string& id = cat[ci].id;
+
+    if (id == "preset.select") {
+        A_long sel = params[idx]->u.pd.value;  // 1-based; 1 == "(none)"
+        int pid = (int)(sel - 2);              // 0-based into the preset library
+        if (pid >= 0 && pid < (int)host::PresetId::Count)
+            applyParamsFromSnapshot(params, host::makePreset((host::PresetId)pid));
+    } else if (id == "util.reset") {
+        applyParamsFromSnapshot(params, ParamSnapshot{});
+    } else if (id == "util.resetCategory") {
+        host::Group g = cat[ci].group;
+        applyParamsFromSnapshot(params, ParamSnapshot{}, &g);
+    } else if (id == "util.randomize") {
+        std::uint32_t seed = (std::uint32_t)in_data->current_time + 1u;
+        applyParamsFromSnapshot(params, host::randomize(buildSnapshot(in_data), seed));
+    }
+    // Copy/Paste/Import/Export/Save/Load require host clipboard/file suites and
+    // are provided by the host UI layer; intentionally left as no-ops here.
+
+    out_data->out_flags |= PF_OutFlag_REFRESH_UI;
+    return PF_Err_NONE;
 }
 
 // ---- SmartFX render --------------------------------------------------------
@@ -287,7 +409,6 @@ PF_Err SmartRender(PF_InData* in_data, PF_OutData* /*out_data*/, PF_SmartRenderE
 extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
                                        PF_ParamDef* params[], PF_LayerDef* output,
                                        void* extra) {
-    (void)params;
     (void)output;
     PF_Err err = PF_Err_NONE;
     try {
@@ -296,6 +417,10 @@ extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutDat
             case PF_Cmd_GLOBAL_SETUP:     err = GlobalSetup(in_data, out_data); break;
             case PF_Cmd_GLOBAL_SETDOWN:   err = GlobalSetdown(in_data, out_data); break;
             case PF_Cmd_PARAMS_SETUP:     err = ParamsSetup(in_data, out_data); break;
+            case PF_Cmd_USER_CHANGED_PARAM:
+                err = UserChangedParam(in_data, out_data, params,
+                                       static_cast<PF_UserChangedParamExtra*>(extra));
+                break;
             case PF_Cmd_SMART_PRE_RENDER:
                 err = PreRender(in_data, out_data, static_cast<PF_PreRenderExtra*>(extra));
                 break;
