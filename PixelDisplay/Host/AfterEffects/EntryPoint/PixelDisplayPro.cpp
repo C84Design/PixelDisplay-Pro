@@ -27,6 +27,7 @@
 #include "Engine/Core/Engine.hpp"
 #include "Host/AfterEffects/Parameters/ParameterCatalog.hpp"
 #include "Host/AfterEffects/Presets/Presets.hpp"
+#include "Host/AfterEffects/PixelDisplayPro_Version.h"
 
 using namespace pd;
 
@@ -41,9 +42,20 @@ std::unique_ptr<Engine> gEngine;
 
 // ---- Setup -----------------------------------------------------------------
 
+// About: shown in After Effects' About Plug-in dialog.
+PF_Err About(PF_InData* /*in_data*/, PF_OutData* out_data) {
+    std::snprintf(out_data->return_msg, sizeof(out_data->return_msg),
+                  "%s v%d.%d\n%s", PDP_NAME, PDP_MAJOR_VERSION, PDP_MINOR_VERSION,
+                  PDP_DESCRIPTION);
+    return PF_Err_NONE;
+}
+
 // GlobalSetup: advertise Multi-Frame Rendering + SmartFX, create the engine.
-PF_Err GlobalSetup(PF_InData* in_data, PF_OutData* out_data) {
-    out_data->my_version = PF_VERSION(1, 0, 0, PF_Stage_DEVELOP, 0);
+// The out-flags here MUST match the PiPL resource (PixelDisplayPro_PiPL.r).
+PF_Err GlobalSetup(PF_InData* /*in_data*/, PF_OutData* out_data) {
+    out_data->my_version = PF_VERSION(PDP_MAJOR_VERSION, PDP_MINOR_VERSION,
+                                      PDP_BUG_VERSION, PDP_STAGE_VERSION,
+                                      PDP_BUILD_VERSION);
     out_data->out_flags  = PF_OutFlag_DEEP_COLOR_AWARE | PF_OutFlag_PIX_INDEPENDENT |
                            PF_OutFlag_NON_PARAM_VARY;
     out_data->out_flags2 = PF_OutFlag2_SUPPORTS_SMART_RENDER |
@@ -270,24 +282,31 @@ PF_Err SmartRender(PF_InData* in_data, PF_OutData* /*out_data*/, PF_SmartRenderE
 
 }  // namespace
 
-// Plugin entry point dispatched by After Effects.
-extern "C" DllExport PF_Err PluginMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
+// Plugin entry point dispatched by After Effects. The symbol name "EffectMain"
+// must match the CodeXXX entries in PixelDisplayPro_PiPL.r.
+extern "C" DllExport PF_Err EffectMain(PF_Cmd cmd, PF_InData* in_data, PF_OutData* out_data,
                                        PF_ParamDef* params[], PF_LayerDef* output,
                                        void* extra) {
     (void)params;
     (void)output;
     PF_Err err = PF_Err_NONE;
-    switch (cmd) {
-        case PF_Cmd_GLOBAL_SETUP:     err = GlobalSetup(in_data, out_data); break;
-        case PF_Cmd_GLOBAL_SETDOWN:   err = GlobalSetdown(in_data, out_data); break;
-        case PF_Cmd_PARAMS_SETUP:     err = ParamsSetup(in_data, out_data); break;
-        case PF_Cmd_SMART_PRE_RENDER:
-            err = PreRender(in_data, out_data, static_cast<PF_PreRenderExtra*>(extra));
-            break;
-        case PF_Cmd_SMART_RENDER:
-            err = SmartRender(in_data, out_data, static_cast<PF_SmartRenderExtra*>(extra));
-            break;
-        default: break;
+    try {
+        switch (cmd) {
+            case PF_Cmd_ABOUT:            err = About(in_data, out_data); break;
+            case PF_Cmd_GLOBAL_SETUP:     err = GlobalSetup(in_data, out_data); break;
+            case PF_Cmd_GLOBAL_SETDOWN:   err = GlobalSetdown(in_data, out_data); break;
+            case PF_Cmd_PARAMS_SETUP:     err = ParamsSetup(in_data, out_data); break;
+            case PF_Cmd_SMART_PRE_RENDER:
+                err = PreRender(in_data, out_data, static_cast<PF_PreRenderExtra*>(extra));
+                break;
+            case PF_Cmd_SMART_RENDER:
+                err = SmartRender(in_data, out_data, static_cast<PF_SmartRenderExtra*>(extra));
+                break;
+            default: break;
+        }
+    } catch (...) {
+        // Never let a C++ exception unwind into the host's C call stack.
+        err = PF_Err_INTERNAL_STRUCT_DAMAGED;
     }
     return err;
 }
