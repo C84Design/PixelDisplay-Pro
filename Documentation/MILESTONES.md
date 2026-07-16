@@ -16,7 +16,7 @@ Each milestone must compile and pass tests before the next begins
 | 9 | GPU optimization (Metal, then D3D12/GL) | ✅ CPU parts verified; GPU written, on-device pending |
 | 10 | UI polish | ✅ Complete (catalog + AE adapter) |
 | 11 | Preset system | ✅ Complete |
-| 12 | Documentation | ⬜ Next |
+| 12 | Documentation | ✅ Complete |
 
 ## Milestone 1 — Core architecture (complete)
 
@@ -44,6 +44,14 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 12 — Documentation (complete)
+
+Full documentation set, cross-linked from [README.md](README.md):
+DESIGN.md (architecture / thread-safety / memory / performance / colour / future),
+CPU_PIPELINE.md, GPU_PIPELINE.md, DISPLAY_SIMULATION.md (+ Math), ARTIFACTS.md,
+AE_INTEGRATION.md, BUILD.md, and EXTENSION_GUIDE.md. Every required topic from the
+brief maps to a document (see the index table).
 
 ## Milestones 10 & 11 — UI + preset system (complete)
 
