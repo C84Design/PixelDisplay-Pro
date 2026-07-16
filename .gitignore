@@ -35,3 +35,6 @@ xcuserdata/
 *.metallib
 *.dxil
 *.spv
+
+# Proprietary Adobe After Effects SDK — never commit (licensed, local build only)
+/sdk/
