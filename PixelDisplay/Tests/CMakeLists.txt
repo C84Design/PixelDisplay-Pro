@@ -8,6 +8,7 @@ add_executable(pdtests
     test_color.cpp
     test_artifacts.cpp
     test_burnin.cpp
+    test_temporal.cpp
 )
 
 target_link_libraries(pdtests PRIVATE pdengine)

@@ -11,7 +11,7 @@ Each milestone must compile and pass tests before the next begins
 | 4 | Color pipeline | ✅ Complete |
 | 5 | Display artifacts | ✅ Complete |
 | 6 | Burn-in simulation | ✅ Complete |
-| 7 | Rolling shutter | ⬜ Planned |
+| 7 | Rolling shutter + temporal | ✅ Complete |
 | 8 | Lens simulation | ⬜ Planned |
 | 9 | GPU optimization (Metal, then D3D12/GL) | ⬜ Planned |
 | 10 | UI polish | ⬜ Planned |
@@ -44,6 +44,25 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 7 — Rolling shutter + temporal animation (complete)
+
+**Delivered** (`TemporalStage`)
+- Camera rolling shutter: each sensor row/column is captured at a time-offset
+  `t + frac·readout`, so time-varying effects freeze into spatial banding.
+  Sensor direction (4-way), readout time, offset supported.
+- Animation group: scanlines (thickness/opacity/movement), rolling refresh bar,
+  PWM brightness flicker (frequency/duty/intensity), random flicker, pixel
+  twinkle, temporal noise, pixel warm-up.
+- All closed-form in frame time/index — no accumulator, MFR-safe. (True
+  inter-frame response smear is intentionally omitted since it would require
+  frame history; warm-up and PWM cover the visible temporal behaviour.)
+
+**Verification**
+- `pdtests`: 32/32. Confirms PWM off-phase dimming, rolling-shutter horizontal
+  banding, per-frame-deterministic temporal noise, and MFR determinism for a
+  fixed frame with the full temporal stack.
+- Clean under ASan + UBSan.
 
 ## Milestone 6 — Burn-in simulation (complete)
 

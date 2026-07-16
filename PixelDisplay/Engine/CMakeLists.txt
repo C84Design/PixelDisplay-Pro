@@ -13,6 +13,7 @@ add_library(pdengine STATIC
     Renderer/Stages/ColorEncodeStage.cpp
     Renderer/Stages/ImperfectionsStage.cpp
     Renderer/Stages/BurnInStage.cpp
+    Renderer/Stages/TemporalStage.cpp
 )
 
 target_include_directories(pdengine PUBLIC
