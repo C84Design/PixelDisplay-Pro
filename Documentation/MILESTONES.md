@@ -14,9 +14,9 @@ Each milestone must compile and pass tests before the next begins
 | 7 | Rolling shutter + temporal | ✅ Complete |
 | 8 | Lens simulation | ✅ Complete |
 | 9 | GPU optimization (Metal, then D3D12/GL) | ✅ CPU parts verified; GPU written, on-device pending |
-| 10 | UI polish | ⬜ Planned |
-| 11 | Preset system | ⬜ Planned |
-| 12 | Documentation | ⬜ Planned |
+| 10 | UI polish | ✅ Complete (catalog + AE adapter) |
+| 11 | Preset system | ✅ Complete |
+| 12 | Documentation | ⬜ Next |
 
 ## Milestone 1 — Core architecture (complete)
 
@@ -44,6 +44,28 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestones 10 & 11 — UI + preset system (complete)
+
+**Delivered** (`pdhostcore` — SDK-independent, unit-tested)
+- `ParameterCatalog`: one declarative, ordered description of every UI control
+  (group, label, type, default, range, enum options) across all 11 collapsible
+  groups. Drives both AE parameter registration and the panel layout, so UI and
+  engine can't drift.
+- Preset system: 20 professionally-tuned presets as `ParamSnapshot` data;
+  symmetric field-visitor (de)serialization that round-trips exactly; seeded
+  deterministic `randomize`; reset/copy/paste semantics.
+- After Effects host adapter (`EntryPoint/PixelDisplayPro.cpp`, SDK-gated):
+  GlobalSetup advertising SmartFX + Multi-Frame-Rendering, catalog-driven
+  ParamsSetup, world→ImageView wrapping, and the MFR-safe SmartRender path
+  calling the shared engine. Documents the integration contract; compiled only
+  when `PD_AE_SDK_ROOT` is set.
+
+**Verification**
+- `pdtests`: 45/45. Catalog completeness (all 11 groups, valid ranges, non-empty
+  labels/enums), 20 distinct display-enabling presets, exact serialize/
+  deserialize round-trip, garbage rejection, deterministic randomize, and a
+  preset rendering end-to-end through the engine. Clean under ASan + UBSan.
 
 ## Milestone 9 — GPU optimization (CPU parts verified; GPU on-device pending)
 

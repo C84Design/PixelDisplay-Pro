@@ -35,6 +35,9 @@ option(PD_WITH_OPENGL "Build the OpenGL GPU backend" OFF)
 
 add_subdirectory(Engine)
 
+# SDK-independent host logic (parameter catalog + presets). Always built.
+add_subdirectory(Host)
+
 if(PD_BUILD_TESTS)
     enable_testing()
     add_subdirectory(Tests)

@@ -11,9 +11,10 @@ add_executable(pdtests
     test_temporal.cpp
     test_optics.cpp
     test_engine_m9.cpp
+    test_presets.cpp
 )
 
-target_link_libraries(pdtests PRIVATE pdengine)
+target_link_libraries(pdtests PRIVATE pdengine pdhostcore)
 target_include_directories(pdtests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 
 if(MSVC)
