@@ -2,6 +2,7 @@
 #include "Engine/Core/FrameGraph.hpp"
 
 #include "Engine/Renderer/Stages/ColorEncodeStage.hpp"
+#include "Engine/Renderer/Stages/ImperfectionsStage.hpp"
 #include "Engine/Renderer/Stages/SynthesisStage.hpp"
 
 namespace pd {
@@ -32,8 +33,24 @@ FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
 
     mix(static_cast<std::uint64_t>(params.subpixel.enable));
 
-    // Later milestones insert Imperfections (M5), Temporal/burn-in (M6/M7), and
-    // Optics (M8) here — all operating in scene-linear.
+    // Imperfections (M5): appended only when at least one artifact is active, so
+    // the graph stays minimal for clean looks.
+    const ArtifactParams& a = params.artifacts;
+    const DisplayCharacteristics& ch = params.characteristics;
+    const bool anyImperfection =
+        a.deadPixelCount || a.stuckPixelCount || a.hotPixelCount || a.mura > 0 ||
+        a.panelUniformity > 0 || a.brightnessDrift > 0 || a.columnDefects > 0 ||
+        a.rowDefects > 0 || a.banding > 0 || a.dust > 0 || a.hair > 0 ||
+        a.microScratches > 0 || a.fingerprints > 0 || a.pressureMarks > 0 ||
+        a.lightLeakage > 0 || a.vignetting > 0 || ch.backlightBleed > 0 ||
+        ch.blackLevel > 0;
+    if (anyImperfection) {
+        mix(0x9151u);
+        g.stages_.push_back(std::make_unique<stages::ImperfectionsStage>());
+    }
+
+    // Later milestones insert Temporal/burn-in (M6/M7) and Optics (M8) here —
+    // all operating in scene-linear.
 
     // Final stage: linear -> output gamut/transfer (DESIGN.md §4 step 12).
     mix(static_cast<std::uint64_t>(params.color.outputSpace));

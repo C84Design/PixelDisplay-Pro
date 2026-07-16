@@ -9,7 +9,7 @@ Each milestone must compile and pass tests before the next begins
 | 2 | Basic display renderer | ✅ Complete (CPU path) |
 | 3 | Subpixel layouts | ✅ Complete |
 | 4 | Color pipeline | ✅ Complete |
-| 5 | Display artifacts | ⬜ Planned |
+| 5 | Display artifacts | ✅ Complete |
 | 6 | Burn-in simulation | ⬜ Planned |
 | 7 | Rolling shutter | ⬜ Planned |
 | 8 | Lens simulation | ⬜ Planned |
@@ -44,6 +44,28 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 5 — Display artifacts (complete)
+
+**Delivered** (`ImperfectionsStage`, in linear light between synthesis and encode)
+- Per-cell defects aligned to the display grid via shared `GridMapping`:
+  dead pixels (count/seed/brightness/colour/clusters), stuck pixels (Random RGB
+  / R / G / B / White), hot pixels.
+- Panel-scale non-uniformity: mura, panel uniformity, brightness drift, column
+  and row defects (all fbm/hash-driven, deterministic).
+- Banding (limited effective bit depth), backlight bleed, black level.
+- Dirty screen: dust specks, fingerprint smudge, micro-scratches, hair,
+  pressure marks.
+- Light leakage (warm corner leak) and vignetting.
+- Value noise + fBm added (`Noise/Noise.hpp`); shared grid math (`Grid.hpp`).
+- Stage appended only when at least one artifact is active (graph stays minimal).
+
+**Verification**
+- `pdtests`: 24/24. Covers corner vignette darkening, dead-cell creation,
+  black-level floor, banding level collapse, and cross-thread determinism with a
+  full artifact stack.
+- Clean under ASan + UBSan.
+- Visual montage of 6 artifact groups inspected — reads as genuine panel defects.
 
 ## Milestone 4 — Color pipeline (complete)
 

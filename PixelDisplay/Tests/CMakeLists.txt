@@ -6,6 +6,7 @@ add_executable(pdtests
     test_synthesis.cpp
     test_subpixels.cpp
     test_color.cpp
+    test_artifacts.cpp
 )
 
 target_link_libraries(pdtests PRIVATE pdengine)
