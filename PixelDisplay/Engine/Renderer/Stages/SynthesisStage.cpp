@@ -3,6 +3,8 @@
 
 #include <cmath>
 
+#include "Engine/Color/Grade.hpp"
+#include "Engine/Color/Primaries.hpp"
 #include "Engine/Color/Transfer.hpp"
 #include "Engine/DisplayLayouts/LayoutModel.hpp"
 #include "Engine/Math/Vec.hpp"
@@ -38,6 +40,7 @@ inline void accumulate(Vec3& emit, int channel, const RGBA& lin, float cov,
 void SynthesisStage::executeCpu(RenderContext& ctx) const {
     const ParamSnapshot& snap = ctx.params();
     const DisplayParams& d = snap.display;
+    const ColorParams& col = snap.color;
     const WorkingImage& src = ctx.front();
     WorkingImage& dst = ctx.back();
 
@@ -54,24 +57,77 @@ void SynthesisStage::executeCpu(RenderContext& ctx) const {
     const float pixRot = -d.pixelRotationDeg * 3.14159265358979f / 180.0f;
     const Vec2 gridOffset{d.gridOffsetX, d.gridOffsetY};
 
-    // Anti-aliasing band: one output pixel spans 1/pitch of a cell; add the
-    // artistic softness controls on top.
     const float aa = 0.5f / pitch + d.edgeSoftening + d.softness;
     const float randomness = math::clampf(d.pixelRandomness, 0.0f, 1.0f);
     const float brightComp = std::max(d.brightnessCompensation, 0.0f);
 
+    // Colour setup. When linear workflow is off we treat the signal as already
+    // linear-coded (no transfer, no gamut change) — a deliberate "flat" look.
+    const ColorSpace inSpace = col.linearWorkflow ? col.inputSpace : ColorSpace::Linear;
+    const math::Mat3 inMat = color::inputToWorking(inSpace);
+    const bool caActive = col.caEnable || col.caAmount != 0.0f ||
+                          col.offsetR.x != 0 || col.offsetR.y != 0 ||
+                          col.offsetG.x != 0 || col.offsetG.y != 0 ||
+                          col.offsetB.x != 0 || col.offsetB.y != 0;
+
+    // Per-channel chromatic-aberration / independent RGB sample offsets.
+    auto channelOffset = [&](int ch, Vec2 pos) -> Vec2 {
+        Vec2 o = ch == 0 ? col.offsetR : (ch == 1 ? col.offsetG : col.offsetB);
+        if (col.caEnable && col.caAmount != 0.0f) {
+            const float chScale = ch == 0 ? 1.0f : (ch == 2 ? -1.0f : 0.0f);
+            Vec2 dir{0, 0};
+            switch (col.caDirection) {
+                case CaDirection::Horizontal: dir = {1, 0}; break;
+                case CaDirection::Vertical:   dir = {0, 1}; break;
+                case CaDirection::Radial: {
+                    Vec2 r = pos - center;
+                    float len = std::sqrt(r.x * r.x + r.y * r.y);
+                    float maxr = std::sqrt(center.x * center.x + center.y * center.y);
+                    if (len > 1e-4f) dir = r * ((len / std::max(maxr, 1.0f)) / len);
+                    break;
+                }
+            }
+            o = o + dir * (col.caAmount * chScale);
+        }
+        return o;
+    };
+
+    // Sample the driving signal at `pos`, decode to linear, convert to working
+    // primaries, and grade. Chromatic aberration samples each channel separately.
+    auto sampleWorking = [&](Vec2 pos) -> RGBA {
+        float r, g, b, a;
+        if (caActive) {
+            RGBA sr = sampling::sampleBilinear(src, pos.x + channelOffset(0, pos).x,
+                                               pos.y + channelOffset(0, pos).y);
+            RGBA sg = sampling::sampleBilinear(src, pos.x + channelOffset(1, pos).x,
+                                               pos.y + channelOffset(1, pos).y);
+            RGBA sb = sampling::sampleBilinear(src, pos.x + channelOffset(2, pos).x,
+                                               pos.y + channelOffset(2, pos).y);
+            r = color::decode(sr.r, inSpace);
+            g = color::decode(sg.g, inSpace);
+            b = color::decode(sb.b, inSpace);
+            a = sg.a;
+        } else {
+            RGBA s = sampling::sampleBilinear(src, pos.x, pos.y);
+            r = color::decode(s.r, inSpace);
+            g = color::decode(s.g, inSpace);
+            b = color::decode(s.b, inSpace);
+            a = s.a;
+        }
+        Vec3 work = inMat * Vec3{r, g, b};
+        work = color::applyGrade(work, col);
+        return {work.x, work.y, work.z, a};
+    };
+
     for (int y = 0; y < h; ++y) {
         RGBA* out = dst.row(y);
         for (int x = 0; x < w; ++x) {
-            // Pixel-center coordinate, transformed into grid space.
             Vec2 p{x + 0.5f, y + 0.5f};
             Vec2 g = math::rotate(p - center, gridRot) + center + gridOffset;
 
-            // Cell index and centroid.
             int cx = static_cast<int>(std::floor(g.x / pitch));
             int cy = static_cast<int>(std::floor(g.y / pitch));
 
-            // Optional per-cell positional jitter (seeded, deterministic).
             Vec2 jitter{0, 0};
             float brightJitter = 1.0f;
             if (randomness > 0.0f) {
@@ -83,22 +139,15 @@ void SynthesisStage::executeCpu(RenderContext& ctx) const {
             }
 
             Vec2 cellCenter{(cx + 0.5f + jitter.x) * pitch, (cy + 0.5f + jitter.y) * pitch};
-
-            // Resample the source signal at the cell centroid, then linearize.
-            // The centroid is mapped back out of grid space to sample the source.
             Vec2 sampleGrid = cellCenter - gridOffset;
             Vec2 samplePos = math::rotate(sampleGrid - center, -gridRot) + center;
-            RGBA sig = sampling::sampleBilinear(src, samplePos.x, samplePos.y);
-            RGBA lin = color::decodeRGBA(sig, snap.color.inputSpace);
+            RGBA lin = sampleWorking(samplePos);  // working-linear, graded
 
-            // Local coordinate within the cell, in [-0.5, 0.5], with pixel rot.
             Vec2 local{g.x / pitch - (cx + 0.5f), g.y / pitch - (cy + 0.5f)};
             local = math::rotate(local, pixRot);
 
             Vec3 emit{0, 0, 0};
             if (snap.subpixel.enable && layout::hasSubpixelStructure(snap.displayType)) {
-                // Decompose the cell into channel-specific subpixels and sum
-                // each subpixel's emission — the essence of real display sim.
                 layout::Subpixel sub[layout::kMaxSubpixels];
                 int n = layout::buildSubpixels(snap.displayType, d, snap.subpixel,
                                                cx & 1, cy & 1, sub);
@@ -108,15 +157,15 @@ void SynthesisStage::executeCpu(RenderContext& ctx) const {
                 }
                 emit = emit * snap.subpixel.brightness;
             } else {
-                // Whole-pixel geometric shape (no subpixel structure).
                 float cov = layout::emitterCoverage(snap.displayType, local, d, aa);
                 emit = Vec3{lin.r, lin.g, lin.b} * cov;
             }
 
             float k = brightComp * brightJitter;
-            RGBA emitted{emit.x * k, emit.y * k, emit.z * k, sig.a};
-            out[x] = color::encodeRGBA(emitted, snap.color.outputSpace);
-            out[x].a = sig.a;  // preserve source alpha (coverage affects colour only)
+            // Emit in SCENE-LINEAR working space. Downstream stages (artifacts,
+            // temporal, optics) operate in linear; the ColorEncode stage converts
+            // to the output gamut/transfer at the very end (DESIGN.md §4 step 12).
+            out[x] = {emit.x * k, emit.y * k, emit.z * k, lin.a};
         }
     }
 }

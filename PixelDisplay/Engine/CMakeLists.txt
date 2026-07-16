@@ -10,6 +10,7 @@ add_library(pdengine STATIC
     Core/FrameGraph.cpp
     Renderer/CPU/CpuBackend.cpp
     Renderer/Stages/SynthesisStage.cpp
+    Renderer/Stages/ColorEncodeStage.cpp
 )
 
 target_include_directories(pdengine PUBLIC

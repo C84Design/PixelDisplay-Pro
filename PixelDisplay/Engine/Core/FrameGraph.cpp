@@ -1,6 +1,7 @@
 // PixelDisplay Pro — Engine/Core/FrameGraph.cpp
 #include "Engine/Core/FrameGraph.hpp"
 
+#include "Engine/Renderer/Stages/ColorEncodeStage.hpp"
 #include "Engine/Renderer/Stages/SynthesisStage.hpp"
 
 namespace pd {
@@ -29,10 +30,15 @@ FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
     mix(static_cast<std::uint64_t>(params.displayType));
     g.stages_.push_back(std::make_unique<stages::SynthesisStage>());
 
-    // Later milestones append: Imperfections (M5), Temporal/burn-in (M6/M7),
-    // Optics (M8), ColorEncode (M4). Each mixes into the topology hash so equal
-    // configurations reuse a compiled graph via the ResourceCache.
     mix(static_cast<std::uint64_t>(params.subpixel.enable));
+
+    // Later milestones insert Imperfections (M5), Temporal/burn-in (M6/M7), and
+    // Optics (M8) here — all operating in scene-linear.
+
+    // Final stage: linear -> output gamut/transfer (DESIGN.md §4 step 12).
+    mix(static_cast<std::uint64_t>(params.color.outputSpace));
+    mix(static_cast<std::uint64_t>(params.color.linearWorkflow));
+    g.stages_.push_back(std::make_unique<stages::ColorEncodeStage>());
 
     g.topologyHash_ = hash;
     return g;

@@ -8,7 +8,7 @@ Each milestone must compile and pass tests before the next begins
 | 1 | Core architecture | ✅ Complete |
 | 2 | Basic display renderer | ✅ Complete (CPU path) |
 | 3 | Subpixel layouts | ✅ Complete |
-| 4 | Color pipeline | ⬜ Planned |
+| 4 | Color pipeline | ✅ Complete |
 | 5 | Display artifacts | ⬜ Planned |
 | 6 | Burn-in simulation | ⬜ Planned |
 | 7 | Rolling shutter | ⬜ Planned |
@@ -44,6 +44,29 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 4 — Color pipeline (complete)
+
+**Delivered**
+- Scene-linear working space made explicit: synthesis now emits **linear** and a
+  dedicated final `ColorEncodeStage` performs the only linear→display encode, so
+  every downstream stage (M5 artifacts, M8 optics) operates in linear light.
+- Transfer functions (`Color/Transfer.hpp`): sRGB / Rec.709 / linear with
+  HDR-preserving extrapolation outside [0,1].
+- Primaries conversion (`Color/Primaries.hpp`): sRGB/Rec.709, Display P3,
+  Rec.2020 via D65 XYZ matrices; input→working and working→output products.
+- Colour grade (`Color/Grade.hpp`): exposure, white balance, tint, contrast
+  (linear pivot), shadow lift, highlight compression (no-clip rolloff),
+  saturation, vibrance, brightness, gamma — all in linear light.
+- Chromatic aberration + independent per-channel RGB sample offsets (radial /
+  horizontal / vertical), evaluated at source-sampling time.
+- Linear-workflow toggle honored end to end.
+
+**Verification**
+- `pdtests`: 19/19. Covers transfer round-trips, P3 primaries round-trip,
+  exposure/saturation grade, highlight-compression no-clip, chromatic-aberration
+  channel separation at an edge, and output-gamut differences.
+- Clean under ASan + UBSan.
 
 ## Milestone 3 — Subpixel layouts (complete)
 

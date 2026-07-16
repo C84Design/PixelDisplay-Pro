@@ -39,6 +39,27 @@ struct Vec4 {
     constexpr Vec3 rgb() const { return {x, y, z}; }
 };
 
+/// Row-major 3x3 matrix for colour primaries conversions.
+struct Mat3 {
+    float m[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};  // identity
+
+    constexpr Vec3 operator*(Vec3 v) const {
+        return {m[0] * v.x + m[1] * v.y + m[2] * v.z,
+                m[3] * v.x + m[4] * v.y + m[5] * v.z,
+                m[6] * v.x + m[7] * v.y + m[8] * v.z};
+    }
+
+    constexpr Mat3 operator*(const Mat3& o) const {
+        Mat3 r;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                r.m[i * 3 + j] = m[i * 3 + 0] * o.m[0 * 3 + j] +
+                                 m[i * 3 + 1] * o.m[1 * 3 + j] +
+                                 m[i * 3 + 2] * o.m[2 * 3 + j];
+        return r;
+    }
+};
+
 // Common scalar helpers (mirrored in shader convention).
 constexpr float saturate(float v) { return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); }
 constexpr float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
