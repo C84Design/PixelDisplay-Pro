@@ -12,6 +12,28 @@
 namespace pd::stages {
 
 using math::Vec2;
+using math::Vec3;
+
+namespace {
+
+/// The signal a subpixel of `channel` emits, after subpixel gamma & RGB scale.
+/// Accumulates into `emit` (the emitted linear RGB) weighted by coverage.
+inline void accumulate(Vec3& emit, int channel, const RGBA& lin, float cov,
+                       const SubpixelParams& sp) {
+    auto shape = [&](float v) { return std::pow(std::max(v, 0.0f), sp.gamma); };
+    switch (channel) {
+        case 0: emit.x += shape(lin.r) * sp.scaleR * cov; break;
+        case 1: emit.y += shape(lin.g) * sp.scaleG * cov; break;
+        case 2: emit.z += shape(lin.b) * sp.scaleB * cov; break;
+        default:  // white / full-colour element
+            emit.x += shape(lin.r) * sp.scaleR * cov;
+            emit.y += shape(lin.g) * sp.scaleG * cov;
+            emit.z += shape(lin.b) * sp.scaleB * cov;
+            break;
+    }
+}
+
+}  // namespace
 
 void SynthesisStage::executeCpu(RenderContext& ctx) const {
     const ParamSnapshot& snap = ctx.params();
@@ -73,10 +95,26 @@ void SynthesisStage::executeCpu(RenderContext& ctx) const {
             Vec2 local{g.x / pitch - (cx + 0.5f), g.y / pitch - (cy + 0.5f)};
             local = math::rotate(local, pixRot);
 
-            float cov = layout::emitterCoverage(snap.displayType, local, d, aa);
-            float emit = cov * brightComp * brightJitter;
+            Vec3 emit{0, 0, 0};
+            if (snap.subpixel.enable && layout::hasSubpixelStructure(snap.displayType)) {
+                // Decompose the cell into channel-specific subpixels and sum
+                // each subpixel's emission — the essence of real display sim.
+                layout::Subpixel sub[layout::kMaxSubpixels];
+                int n = layout::buildSubpixels(snap.displayType, d, snap.subpixel,
+                                               cx & 1, cy & 1, sub);
+                for (int i = 0; i < n; ++i) {
+                    float cov = layout::subpixelCoverage(sub[i], local, aa);
+                    if (cov > 0.0f) accumulate(emit, sub[i].channel, lin, cov, snap.subpixel);
+                }
+                emit = emit * snap.subpixel.brightness;
+            } else {
+                // Whole-pixel geometric shape (no subpixel structure).
+                float cov = layout::emitterCoverage(snap.displayType, local, d, aa);
+                emit = Vec3{lin.r, lin.g, lin.b} * cov;
+            }
 
-            RGBA emitted{lin.r * emit, lin.g * emit, lin.b * emit, sig.a};
+            float k = brightComp * brightJitter;
+            RGBA emitted{emit.x * k, emit.y * k, emit.z * k, sig.a};
             out[x] = color::encodeRGBA(emitted, snap.color.outputSpace);
             out[x].a = sig.a;  // preserve source alpha (coverage affects colour only)
         }

@@ -7,7 +7,7 @@ Each milestone must compile and pass tests before the next begins
 |---|-------|--------|
 | 1 | Core architecture | ✅ Complete |
 | 2 | Basic display renderer | ✅ Complete (CPU path) |
-| 3 | Subpixel layouts | ⬜ Planned |
+| 3 | Subpixel layouts | ✅ Complete |
 | 4 | Color pipeline | ⬜ Planned |
 | 5 | Display artifacts | ⬜ Planned |
 | 6 | Burn-in simulation | ⬜ Planned |
@@ -44,6 +44,28 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
+
+## Milestone 3 — Subpixel layouts (complete)
+
+**Delivered**
+- Subpixel decomposition in `LayoutModel`: each cell splits into channel-specific
+  emissive elements, each driven only by its input channel — the core of real
+  display simulation.
+- Layouts: RGB & BGR vertical stripe (LCD/OLED/MiniLED/MicroLED/Retina/Studio/
+  MacBook/DS), continuous aperture-grille stripes (Trinitron), RGB-dot triads
+  with per-row hex offset (CRT shadow mask), spaced RGB dots (LED billboard /
+  RGB matrix), PenTile RGBG, and Diamond PenTile (Samsung AMOLED).
+- Subpixel controls wired: enable, size, gap, softness, brightness, per-channel
+  gamma, independent R/G/B scale, RGB/BGR ordering.
+- Geometric single-emitter types (Square/Circle/Hex/Diamond/GameBoy) fall back
+  to the whole-pixel path when subpixels are off.
+
+**Verification**
+- `pdtests`: 13/13. Property tests confirm R/G/B land in the correct cell thirds,
+  BGR reverses order, a green source lights only green subpixels, and disabling
+  subpixels yields a neutral full-colour emitter.
+- Clean under ASan + UBSan.
+- Visual montage of 8 subpixel layouts inspected — matches real panel structure.
 
 ## Milestone 2 — Basic display renderer (complete, CPU path)
 
