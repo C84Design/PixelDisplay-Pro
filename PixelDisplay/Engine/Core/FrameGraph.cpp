@@ -1,6 +1,8 @@
 // PixelDisplay Pro — Engine/Core/FrameGraph.cpp
 #include "Engine/Core/FrameGraph.hpp"
 
+#include "Engine/Renderer/Stages/SynthesisStage.hpp"
+
 namespace pd {
 
 // Milestone 1 builds an empty graph (passthrough). Subsequent milestones append
@@ -23,8 +25,13 @@ FrameGraph FrameGraph::compile(const ParamSnapshot& params) {
         return g;
     }
 
-    // (Stages are added in later milestones. The synthesis stage arrives in M2.)
+    // Milestone 2: the fused synthesis stage (resample + linear + emitter).
     mix(static_cast<std::uint64_t>(params.displayType));
+    g.stages_.push_back(std::make_unique<stages::SynthesisStage>());
+
+    // Later milestones append: Imperfections (M5), Temporal/burn-in (M6/M7),
+    // Optics (M8), ColorEncode (M4). Each mixes into the topology hash so equal
+    // configurations reuse a compiled graph via the ResourceCache.
     mix(static_cast<std::uint64_t>(params.subpixel.enable));
 
     g.topologyHash_ = hash;

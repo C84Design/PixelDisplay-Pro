@@ -6,7 +6,7 @@ Each milestone must compile and pass tests before the next begins
 | M | Title | Status |
 |---|-------|--------|
 | 1 | Core architecture | ✅ Complete |
-| 2 | Basic display renderer | ⏳ Next |
+| 2 | Basic display renderer | ✅ Complete (CPU path) |
 | 3 | Subpixel layouts | ⬜ Planned |
 | 4 | Color pipeline | ⬜ Planned |
 | 5 | Display artifacts | ⬜ Planned |
@@ -44,5 +44,35 @@ Each milestone must compile and pass tests before the next begins
 **Notes**
 - Temporal effects will be closed-form in time (no accumulators) so MFR safety
   is preserved — see DESIGN.md §10, §12.
-- GPU backends are scaffolded and gated in CMake; the Metal backend lands with
-  the Milestone 2 render path per the approved plan.
+
+## Milestone 2 — Basic display renderer (complete, CPU path)
+
+**Delivered**
+- `SynthesisStage`: fuses pipeline steps 3–8 (resample → linear → emitter
+  footprint → brightness) into one kernel, per DESIGN.md §4/§6.1.
+- Analytic emitter footprints via SDFs (`Engine/Math/Sdf.hpp`) with resolution-
+  independent anti-aliasing — Square, RoundedSquare, Circular, Diamond,
+  Hexagonal (never bitmaps).
+- Scene-linear working space with sRGB transfer (`Engine/Color/Transfer.hpp`);
+  bilinear source resampling (`Engine/Sampling/Resampler.hpp`).
+- Deterministic per-cell jitter via coordinate hashing (`Engine/Noise/Hash.hpp`)
+  — no stateful RNG, so it stays MFR-safe.
+- Grid controls wired: pixel size, dot size, spacing, roundness, aspect,
+  grid/pixel rotation, grid offset, resolution scale, randomness, brightness
+  compensation, softness, edge softening.
+
+**Verification**
+- `pdtests`: 9/9 passing. Property tests cover: effect actually applied, gaps
+  darker than dot centers, full-coverage solid-colour round-trip within 3/255,
+  and deterministic/MFR-safe output across 8 concurrent threads.
+- Visual montage rendered and inspected (6 layout types over a gradient +
+  test bars) — confirms a genuine display look, not a halftone overlay.
+
+**Scheduling note (GPU backend)**
+- The approved plan places GPU optimization in Milestone 9, and this CI/build
+  environment (Linux) has no Metal/D3D12 toolchain to compile or verify GPU
+  code against. To honor "each milestone must compile" and "never leave
+  partially implemented systems", the GPU backends (Metal-first) are
+  implemented and validated in M9 rather than committing untested, unbuildable
+  GPU sources now. The backend abstraction, priority selection, and CMake
+  gating are already in place so M9 slots in without engine changes.

@@ -9,6 +9,7 @@ add_library(pdengine STATIC
     Core/Engine.cpp
     Core/FrameGraph.cpp
     Renderer/CPU/CpuBackend.cpp
+    Renderer/Stages/SynthesisStage.cpp
 )
 
 target_include_directories(pdengine PUBLIC

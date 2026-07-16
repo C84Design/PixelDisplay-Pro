@@ -3,6 +3,7 @@
 add_executable(pdtests
     test_main.cpp
     test_passthrough.cpp
+    test_synthesis.cpp
 )
 
 target_link_libraries(pdtests PRIVATE pdengine)
