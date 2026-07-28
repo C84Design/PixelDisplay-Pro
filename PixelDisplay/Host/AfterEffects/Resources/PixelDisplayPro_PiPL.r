@@ -18,22 +18,6 @@
 
 #include "PixelDisplayPro_Version.h"
 
-/* Rez compiles this resource WITHOUT AE_Effect.h, so the PF_VERSION macro and
- * the PF_Stage_* constants used by AE_Effect_Version below are not defined here
- * (they are only needed to fold the version fields into a single long). Provide
- * Rez-safe fallbacks with the SDK's bit layout. Guarded with #ifndef so the C++
- * entry point — which does include AE_Effect.h — always uses the real ones. */
-#ifndef PF_Stage_DEVELOP
-    #define PF_Stage_DEVELOP  0
-    #define PF_Stage_ALPHA    1
-    #define PF_Stage_BETA     2
-    #define PF_Stage_RELEASE  3
-#endif
-#ifndef PF_VERSION
-    #define PF_VERSION(MAJOR, MINOR, BUG, STAGE, BUILD) \
-        (((MAJOR) << 19) | ((MINOR) << 15) | ((BUG) << 11) | ((STAGE) << 9) | (BUILD))
-#endif
-
 resource 'PiPL' (16000) {
     {
         /* [0] */
@@ -71,13 +55,13 @@ resource 'PiPL' (16000) {
             PF_PLUG_IN_VERSION,
             PF_PLUG_IN_SUBVERS
         },
-        /* [8] */
+        /* [8] Folded version integer. Rez already defines PF_VERSION differently
+         * from the C macro, so the value is written as a literal to match what
+         * GlobalSetup() computes: PF_VERSION(1, 0, 0, PF_Stage_DEVELOP, 1) =
+         * (1<<19) | (0<<15) | (0<<11) | (0<<9) | 1 = 524289. Keep in sync with
+         * PixelDisplayPro_Version.h. */
         AE_Effect_Version {
-            PF_VERSION( PDP_MAJOR_VERSION,
-                        PDP_MINOR_VERSION,
-                        PDP_BUG_VERSION,
-                        PDP_STAGE_VERSION,
-                        PDP_BUILD_VERSION )
+            524289
         },
         /* [9] */
         AE_Effect_Info_Flags {
