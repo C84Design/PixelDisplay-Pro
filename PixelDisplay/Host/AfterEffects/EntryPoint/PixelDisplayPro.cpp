@@ -92,9 +92,12 @@ PF_Err GlobalSetdown(PF_InData* /*in_data*/, PF_OutData* /*out_data*/) {
 // matching PF_ADD_* macro; enums become popups.)
 PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
     PF_Err err = PF_Err_NONE;
-    // The PF_ADD_* macros each declare and populate their own PF_ParamDef, so no
-    // shared one is needed here; the single supervised popup below is hand-built.
+    // This SDK's PF_ADD_* macros fill a PF_ParamDef named `def` in THIS scope and
+    // then call PF_ADD_PARAM(in_data, -1, &def), so one is declared here and
+    // cleared before each control. Supervised controls set def.flags beforehand.
+    PF_ParamDef def;
     for (const host::ParamInfo& p : host::catalog()) {
+        AEFX_CLR_STRUCT(def);
         switch (p.type) {
             case host::ParamType::Float:
                 PF_ADD_FLOAT_SLIDERX(p.label.c_str(), p.minValue, p.maxValue, p.minValue,
@@ -110,27 +113,17 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
                 break;
             case host::ParamType::Enum: {
                 if (p.id == "preset.select") {
-                    // The preset popup is filled from the preset library and must be
-                    // supervised so selecting one applies it (USER_CHANGED_PARAM).
-                    // PF_ADD_POPUP takes no flags argument, so this one control is
-                    // built by hand to set PF_ParamFlag_SUPERVISE on the ParamDef.
+                    // The preset popup is filled from the preset library and is
+                    // supervised (def.flags set before the macro) so selecting one
+                    // applies it via PF_Cmd_USER_CHANGED_PARAM.
                     std::string menu = "(none)";
                     for (int k = 0; k < (int)host::PresetId::Count; ++k) {
                         menu += "|";
                         menu += host::presetName((host::PresetId)k);
                     }
-                    PF_ParamDef def;
-                    AEFX_CLR_STRUCT(def);
-                    def.param_type = PF_Param_POPUP;
-                    std::strncpy(def.name, p.label.c_str(), sizeof(def.name) - 1);
-                    def.name[sizeof(def.name) - 1] = '\0';
-                    def.flags            = PF_ParamFlag_SUPERVISE;
-                    def.u.pd.num_choices = (A_short)((int)host::PresetId::Count + 1);
-                    def.u.pd.dephault    = 1;
-                    def.u.pd.value       = 1;
-                    def.u.pd.u.namesptr  = menu.c_str();
-                    def.uu.id            = 0;
-                    err = PF_ADD_PARAM(in_data, -1, &def);
+                    def.flags = PF_ParamFlag_SUPERVISE;
+                    PF_ADD_POPUP(p.label.c_str(), (A_long)host::PresetId::Count + 1,
+                                 1, menu.c_str(), 0);
                 } else {
                     std::string menu;
                     for (std::size_t i = 0; i < p.options.size(); ++i) {
