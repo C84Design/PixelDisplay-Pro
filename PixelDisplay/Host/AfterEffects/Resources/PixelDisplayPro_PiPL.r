@@ -18,6 +18,22 @@
 
 #include "PixelDisplayPro_Version.h"
 
+/* Rez compiles this resource WITHOUT AE_Effect.h, so the PF_VERSION macro and
+ * the PF_Stage_* constants used by AE_Effect_Version below are not defined here
+ * (they are only needed to fold the version fields into a single long). Provide
+ * Rez-safe fallbacks with the SDK's bit layout. Guarded with #ifndef so the C++
+ * entry point — which does include AE_Effect.h — always uses the real ones. */
+#ifndef PF_Stage_DEVELOP
+    #define PF_Stage_DEVELOP  0
+    #define PF_Stage_ALPHA    1
+    #define PF_Stage_BETA     2
+    #define PF_Stage_RELEASE  3
+#endif
+#ifndef PF_VERSION
+    #define PF_VERSION(MAJOR, MINOR, BUG, STAGE, BUILD) \
+        (((MAJOR) << 19) | ((MINOR) << 15) | ((BUG) << 11) | ((STAGE) << 9) | (BUILD))
+#endif
+
 resource 'PiPL' (16000) {
     {
         /* [0] */
