@@ -34,7 +34,12 @@ target_compile_features(PixelDisplayPro PRIVATE cxx_std_20)
 set_target_properties(PixelDisplayPro PROPERTIES PREFIX "")   # no "lib" prefix
 
 # ---------------------------------------------------------------------------
-# macOS: .plugin bundle + PiPL embedded via Rez into the executable's data fork
+# macOS: .plugin bundle + PiPL embedded via Rez into the executable's RESOURCE
+# fork. NOTE: do NOT pass -useDF here. -useDF makes Rez treat the data fork as
+# the resource file, which overwrites the linked Mach-O executable (leaving a
+# tiny resource-only file AE cannot load). Writing to the resource fork keeps
+# the Mach-O intact in the data fork, which is the correct layout for a Mac
+# .plugin — AE reads the PiPL from the resource fork at scan time.
 # ---------------------------------------------------------------------------
 if(APPLE)
     set_target_properties(PixelDisplayPro PROPERTIES
@@ -47,16 +52,17 @@ if(APPLE)
 
     find_program(REZ_EXECUTABLE Rez REQUIRED)
 
-    # Write the classic 'eFKTFXTC' PkgInfo and compile+embed the PiPL resource.
+    # Write the classic 'eFKTFXTC' PkgInfo and compile the PiPL into the
+    # executable's resource fork (no -useDF — see the note above).
     add_custom_command(TARGET PixelDisplayPro POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E echo "eFKTFXTC" >
                 "$<TARGET_BUNDLE_DIR:PixelDisplayPro>/Contents/PkgInfo"
         COMMAND ${REZ_EXECUTABLE}
-                -d __MACH__ -useDF
+                -d __MACH__
                 -i "${AE_HEADERS}" -i "${AE_RESOURCES}" -i "${PDP_SRC_DIR}"
                 -o "$<TARGET_FILE:PixelDisplayPro>"
                 "${PDP_PIPL}"
-        COMMENT "Embedding PiPL resource (Rez) and writing PkgInfo")
+        COMMENT "Embedding PiPL resource (Rez, resource fork) and writing PkgInfo")
 
 # ---------------------------------------------------------------------------
 # Windows: .aex + PiPL compiled by PiPLtool into a .rc linked into the module
