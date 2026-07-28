@@ -34,6 +34,7 @@ std::vector<ParamInfo> build() {
     std::vector<ParamInfo> c;
 
     // Display
+    c.push_back(btn(G::Display, "reset.display", "Reset Section"));
     c.push_back(bl(G::Display, "display.enable", "Enable", false));
     c.push_back(fl(G::Display, "display.pixelSize", "Pixel Size", 8, 1, 256, "px"));
     c.push_back(fl(G::Display, "display.dotSize", "Dot Size", 0.85f, 0, 1.5f));
@@ -51,6 +52,7 @@ std::vector<ParamInfo> build() {
     c.push_back(fl(G::Display, "display.pixelRandomness", "Pixel Randomness", 0, 0, 1));
 
     // Pattern (display type)
+    c.push_back(btn(G::Pattern, "reset.pattern", "Reset Section"));
     c.push_back(en(G::Pattern, "displayType", "Display Type", 0, {
         {0, "LCD RGB Stripe"}, {1, "LCD BGR Stripe"}, {2, "OLED"}, {3, "Pentile OLED"},
         {4, "Diamond OLED"}, {5, "MiniLED"}, {6, "MicroLED"}, {7, "CRT Shadow Mask"},
@@ -61,6 +63,7 @@ std::vector<ParamInfo> build() {
         {21, "Diamond"}}));
 
     // Subpixels
+    c.push_back(btn(G::Subpixels, "reset.subpixels", "Reset Section"));
     c.push_back(bl(G::Subpixels, "subpixel.enable", "Enable Subpixels", true));
     c.push_back(fl(G::Subpixels, "subpixel.size", "Subpixel Size", 1, 0.1f, 1.5f));
     c.push_back(fl(G::Subpixels, "subpixel.gap", "Subpixel Gap", 0.1f, 0, 0.9f));
@@ -74,6 +77,7 @@ std::vector<ParamInfo> build() {
                    {{0, "RGB"}, {1, "BGR"}, {2, "RGBG (PenTile)"}, {3, "Custom"}}));
 
     // Color
+    c.push_back(btn(G::Color, "reset.color", "Reset Section"));
     c.push_back(bl(G::Color, "color.linearWorkflow", "Linear Workflow", true));
     c.push_back(en(G::Color, "color.inputSpace", "Input Color Space", 1,
                    {{0, "Linear"}, {1, "sRGB"}, {2, "Display P3"}, {3, "Rec.709"}, {4, "Rec.2020"}}));
@@ -95,6 +99,7 @@ std::vector<ParamInfo> build() {
     c.push_back(fl(G::Color, "color.shadowLift", "Shadow Lift", 0, 0, 1));
 
     // Display Characteristics
+    c.push_back(btn(G::DisplayCharacteristics, "reset.chr", "Reset Section"));
     c.push_back(fl(G::DisplayCharacteristics, "chr.glowRadius", "Glow Radius", 0, 0, 64, "px"));
     c.push_back(fl(G::DisplayCharacteristics, "chr.glowIntensity", "Glow Intensity", 0, 0, 4));
     c.push_back(fl(G::DisplayCharacteristics, "chr.bloomThreshold", "Bloom Threshold", 1, 0, 4));
@@ -109,6 +114,7 @@ std::vector<ParamInfo> build() {
     c.push_back(fl(G::DisplayCharacteristics, "chr.imagePersistence", "Image Persistence", 0, 0, 1));
 
     // Artifacts
+    c.push_back(btn(G::Artifacts, "reset.artifacts", "Reset Section"));
     c.push_back(in(G::Artifacts, "art.deadPixelCount", "Dead Pixels", 0, 0, 10000));
     c.push_back(in(G::Artifacts, "art.deadPixelSeed", "Dead Pixel Random Seed", 1, 0, 100000));
     c.push_back(fl(G::Artifacts, "art.deadPixelBrightness", "Dead Pixel Brightness", 0, 0, 1));
@@ -143,6 +149,7 @@ std::vector<ParamInfo> build() {
     c.push_back(bl(G::Artifacts, "burn.taskbar", "Taskbar Burn-In", false));
 
     // Animation
+    c.push_back(btn(G::Animation, "reset.animation", "Reset Section"));
     c.push_back(fl(G::Animation, "anim.scanlineThickness", "Scanline Thickness", 0, 0, 1));
     c.push_back(fl(G::Animation, "anim.scanlineOpacity", "Scanline Opacity", 0, 0, 1));
     c.push_back(fl(G::Animation, "anim.scanlineMovement", "Scanline Movement", 0, -1, 1));
@@ -161,6 +168,7 @@ std::vector<ParamInfo> build() {
     c.push_back(bl(G::Animation, "anim.oledInstantMode", "OLED Instant Mode", true));
 
     // Lens / Camera
+    c.push_back(btn(G::Lens, "reset.lens", "Reset Section"));
     c.push_back(bl(G::Lens, "lens.rollingShutterEnable", "Rolling Shutter", false));
     c.push_back(fl(G::Lens, "lens.readoutTimeMs", "Readout Time", 0, 0, 100, "ms"));
     c.push_back(en(G::Lens, "lens.sensorDirection", "Sensor Direction", 0,
@@ -179,6 +187,7 @@ std::vector<ParamInfo> build() {
     c.push_back(fl(G::Lens, "lens.antiReflectiveCoating", "Anti-Reflective Coating", 0, 0, 1));
 
     // Performance
+    c.push_back(btn(G::Performance, "reset.performance", "Reset Section"));
     c.push_back(bl(G::Performance, "perf.gpuEnable", "GPU Enable", true));
     c.push_back(bl(G::Performance, "perf.cpuEnable", "CPU Enable", true));
     c.push_back(bl(G::Performance, "perf.adaptiveQuality", "Adaptive Quality", false));

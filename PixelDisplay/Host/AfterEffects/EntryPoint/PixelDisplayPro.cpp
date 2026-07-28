@@ -188,8 +188,12 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
                 break;
             }
             case host::ParamType::Color:  PF_ADD_COLOR(p.label.c_str(), 0, 0, 0, 0); break;
-            case host::ParamType::Button: PF_ADD_BUTTON(p.label.c_str(), "Apply",
-                                                        0, PF_ParamFlag_SUPERVISE, 0); break;
+            case host::ParamType::Button: {
+                // Per-group reset buttons read "Reset"; the rest read "Apply".
+                const char* btnText = p.id.rfind("reset.", 0) == 0 ? "Reset" : "Apply";
+                PF_ADD_BUTTON(p.label.c_str(), btnText, 0, PF_ParamFlag_SUPERVISE, 0);
+                break;
+            }
             case host::ParamType::Group:  break;
         }
     }
@@ -375,7 +379,8 @@ PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* p
             applyParamsFromSnapshot(params, host::makePreset((host::PresetId)pid));
     } else if (id == "util.reset") {
         applyParamsFromSnapshot(params, ParamSnapshot{});
-    } else if (id == "util.resetCategory") {
+    } else if (id == "util.resetCategory" || id.rfind("reset.", 0) == 0) {
+        // Reset only the group the button lives in, to catalog defaults.
         host::Group g = cat[ci].group;
         applyParamsFromSnapshot(params, ParamSnapshot{}, &g);
     } else if (id == "util.randomize") {
