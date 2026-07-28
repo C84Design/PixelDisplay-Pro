@@ -16,10 +16,11 @@
 
 namespace pd::host {
 
-/// Collapsible UI groups, in panel order.
+/// Collapsible UI groups, in panel order. `Banner` is the title header at the
+/// very top; it holds the single "Make It Old" action.
 enum class Group {
-    Display, Pattern, Subpixels, Color, DisplayCharacteristics,
-    Artifacts, Animation, Lens, Performance, Presets, Utilities,
+    Banner, Display, Pattern, Subpixels, Color, DisplayCharacteristics,
+    Artifacts, Animation, Lens, Performance,
 };
 
 enum class ParamType { Bool, Float, Int, Enum, Color, Button, Group };

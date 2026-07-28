@@ -33,6 +33,9 @@ ParamInfo en(G g, const char* id, const char* label, int def, std::vector<EnumOp
 std::vector<ParamInfo> build() {
     std::vector<ParamInfo> c;
 
+    // Banner (title header) — holds the one-click "age the display" action.
+    c.push_back(btn(G::Banner, "makeItOld", "Make It Old"));
+
     // Display
     c.push_back(btn(G::Display, "reset.display", "Reset Section"));
     c.push_back(bl(G::Display, "display.enable", "Enable", false));
@@ -201,18 +204,6 @@ std::vector<ParamInfo> build() {
     c.push_back(bl(G::Performance, "perf.showMemoryUsage", "Memory Usage Display", false));
     c.push_back(bl(G::Performance, "perf.showStatistics", "Render Statistics", false));
 
-    // Presets (popup filled by the preset system) + Utilities
-    c.push_back(en(G::Presets, "preset.select", "Preset", 0, {{0, "(none)"}}));
-    c.push_back(btn(G::Utilities, "util.reset", "Reset"));
-    c.push_back(btn(G::Utilities, "util.resetCategory", "Reset Current Category"));
-    c.push_back(btn(G::Utilities, "util.randomize", "Randomize"));
-    c.push_back(btn(G::Utilities, "util.copy", "Copy Settings"));
-    c.push_back(btn(G::Utilities, "util.paste", "Paste Settings"));
-    c.push_back(btn(G::Utilities, "util.importPreset", "Import Preset"));
-    c.push_back(btn(G::Utilities, "util.exportPreset", "Export Preset"));
-    c.push_back(btn(G::Utilities, "util.saveUser", "Save User Preset"));
-    c.push_back(btn(G::Utilities, "util.loadUser", "Load User Preset"));
-
     return c;
 }
 
@@ -225,6 +216,7 @@ const std::vector<ParamInfo>& catalog() {
 
 const char* groupName(Group g) {
     switch (g) {
+        case Group::Banner:                 return "PixelDisplay Pro 📺";
         case Group::Display:                return "Display";
         case Group::Pattern:                return "Pattern";
         case Group::Subpixels:              return "Subpixels";
@@ -234,8 +226,6 @@ const char* groupName(Group g) {
         case Group::Animation:              return "Animation";
         case Group::Lens:                   return "Lens";
         case Group::Performance:            return "Performance";
-        case Group::Presets:                return "Presets";
-        case Group::Utilities:              return "Utilities";
     }
     return "";
 }

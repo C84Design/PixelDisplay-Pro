@@ -30,7 +30,7 @@ PD_TEST("parameter catalog covers all groups with valid ranges") {
         PD_CHECK(!p.id.empty());
         PD_CHECK(!p.label.empty());
     }
-    PD_CHECK_EQ(groups.size(), std::size_t(11));   // all UI groups present
+    PD_CHECK_EQ(groups.size(), std::size_t(10));   // banner + 9 parameter groups
 }
 
 PD_TEST("all 20 presets enable the display and are distinct") {

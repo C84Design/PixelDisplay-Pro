@@ -164,33 +164,22 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
                 PF_ADD_CHECKBOX(p.label.c_str(), "", (A_long)p.defaultValue != 0, 0, 0);
                 break;
             case host::ParamType::Enum: {
-                if (p.id == "preset.select") {
-                    // The preset popup is filled from the preset library and is
-                    // supervised (def.flags set before the macro) so selecting one
-                    // applies it via PF_Cmd_USER_CHANGED_PARAM.
-                    std::string menu = "(none)";
-                    for (int k = 0; k < (int)host::PresetId::Count; ++k) {
-                        menu += "|";
-                        menu += host::presetName((host::PresetId)k);
-                    }
-                    def.flags = PF_ParamFlag_SUPERVISE;
-                    PF_ADD_POPUP(p.label.c_str(), (A_long)host::PresetId::Count + 1,
-                                 1, menu.c_str(), 0);
-                } else {
-                    std::string menu;
-                    for (std::size_t i = 0; i < p.options.size(); ++i) {
-                        if (i) menu += "|";
-                        menu += p.options[i].label;
-                    }
-                    PF_ADD_POPUP(p.label.c_str(), (A_long)p.options.size(),
-                                 (A_long)p.defaultValue + 1, menu.c_str(), 0);
+                std::string menu;
+                for (std::size_t i = 0; i < p.options.size(); ++i) {
+                    if (i) menu += "|";
+                    menu += p.options[i].label;
                 }
+                PF_ADD_POPUP(p.label.c_str(), (A_long)p.options.size(),
+                             (A_long)p.defaultValue + 1, menu.c_str(), 0);
                 break;
             }
             case host::ParamType::Color:  PF_ADD_COLOR(p.label.c_str(), 0, 0, 0, 0); break;
             case host::ParamType::Button: {
-                // Per-group reset buttons read "Reset"; the rest read "Apply".
-                const char* btnText = p.id.rfind("reset.", 0) == 0 ? "Reset" : "Apply";
+                // The banner action reads "Make It Old"; per-group resets read
+                // "Reset"; any other button reads "Apply".
+                const char* btnText = p.id == "makeItOld"          ? "Make It Old"
+                                    : p.id.rfind("reset.", 0) == 0 ? "Reset"
+                                                                   : "Apply";
                 PF_ADD_BUTTON(p.label.c_str(), btnText, 0, PF_ParamFlag_SUPERVISE, 0);
                 break;
             }
@@ -325,7 +314,6 @@ void applyParamsFromSnapshot(PF_ParamDef* params[], const ParamSnapshot& snap,
     for (std::size_t i = 0; i < cat.size(); ++i) {
         const host::ParamInfo& p = cat[i];
         if (p.type == host::ParamType::Button || p.type == host::ParamType::Group) continue;
-        if (p.id == "preset.select") continue;                 // don't clobber the selector
         if (onlyGroup && p.group != *onlyGroup) continue;
 
         PF_ParamDef* pd = params[paramLayout().aeIndex[i]];
@@ -360,8 +348,8 @@ void applyParamsFromSnapshot(PF_ParamDef* params[], const ParamSnapshot& snap,
     }
 }
 
-// UserChangedParam: responds to the supervised controls — preset selection and
-// the reset / randomize utility buttons — by writing new parameter values.
+// UserChangedParam: responds to the supervised action buttons — "Make It Old"
+// (randomize) and the per-group Reset buttons — by writing new parameter values.
 PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
                         const PF_UserChangedParamExtra* extra) {
     const auto& cat = host::catalog();
@@ -372,23 +360,15 @@ PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* p
     if (ci < 0) return PF_Err_NONE;          // a group-marker param, not a control
     const std::string& id = cat[ci].id;
 
-    if (id == "preset.select") {
-        A_long sel = params[idx]->u.pd.value;  // 1-based; 1 == "(none)"
-        int pid = (int)(sel - 2);              // 0-based into the preset library
-        if (pid >= 0 && pid < (int)host::PresetId::Count)
-            applyParamsFromSnapshot(params, host::makePreset((host::PresetId)pid));
-    } else if (id == "util.reset") {
-        applyParamsFromSnapshot(params, ParamSnapshot{});
-    } else if (id == "util.resetCategory" || id.rfind("reset.", 0) == 0) {
+    if (id == "makeItOld") {
+        // "Make It Old": randomize the current settings to age the display.
+        std::uint32_t seed = (std::uint32_t)in_data->current_time + 1u;
+        applyParamsFromSnapshot(params, host::randomize(buildSnapshot(in_data), seed));
+    } else if (id.rfind("reset.", 0) == 0) {
         // Reset only the group the button lives in, to catalog defaults.
         host::Group g = cat[ci].group;
         applyParamsFromSnapshot(params, ParamSnapshot{}, &g);
-    } else if (id == "util.randomize") {
-        std::uint32_t seed = (std::uint32_t)in_data->current_time + 1u;
-        applyParamsFromSnapshot(params, host::randomize(buildSnapshot(in_data), seed));
     }
-    // Copy/Paste/Import/Export/Save/Load require host clipboard/file suites and
-    // are provided by the host UI layer; intentionally left as no-ops here.
 
     out_data->out_flags |= PF_OutFlag_REFRESH_UI;
     return PF_Err_NONE;
