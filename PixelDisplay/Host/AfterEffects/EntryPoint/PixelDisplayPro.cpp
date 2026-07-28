@@ -26,6 +26,7 @@
 #include <new>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "Engine/Core/Engine.hpp"
 #include "Host/AfterEffects/Parameters/ParameterCatalog.hpp"
@@ -53,6 +54,44 @@ int refreshIndexFromHz(double hz) {
     return best;
 }
 A_u_char to255(float f) { f = f < 0 ? 0 : (f > 1 ? 1 : f); return (A_u_char)(f * 255.0f + 0.5f); }
+
+// AE assigns a parameter index to every control AND to each PF_ADD_TOPIC /
+// PF_END_TOPIC group marker. ParamsSetup opens a collapsible topic at every
+// group boundary and closes it after the group, so the catalog index no longer
+// equals the AE parameter index. This layout — computed once from the catalog
+// with the SAME grouping rule ParamsSetup uses — maps between the two, and is
+// the single source both the setup and the value read/write paths rely on.
+struct ParamLayout {
+    std::vector<A_long> aeIndex;    // catalog entry  -> AE param index (1-based)
+    std::vector<int>    catalogOf;  // AE param index -> catalog entry (-1 = layer/topic)
+    A_long              total = 0;  // count of PF params added (controls + topics)
+};
+
+const ParamLayout& paramLayout() {
+    static const ParamLayout L = [] {
+        ParamLayout out;
+        const auto& cat = host::catalog();
+        out.aeIndex.assign(cat.size(), 0);
+        out.catalogOf.push_back(-1);   // AE index 0 is the input layer
+        A_long idx = 0;
+        bool haveGroup = false;
+        host::Group cur{};
+        for (std::size_t i = 0; i < cat.size(); ++i) {
+            const host::Group g = cat[i].group;
+            if (!haveGroup || g != cur) {
+                if (haveGroup) { ++idx; out.catalogOf.push_back(-1); }  // END previous
+                ++idx; out.catalogOf.push_back(-1);                     // START current
+                cur = g; haveGroup = true;
+            }
+            ++idx; out.catalogOf.push_back((int)i);                     // the control
+            out.aeIndex[i] = idx;
+        }
+        if (haveGroup) { ++idx; out.catalogOf.push_back(-1); }          // final END
+        out.total = idx;
+        return out;
+    }();
+    return L;
+}
 
 // ---- Setup -----------------------------------------------------------------
 
@@ -96,7 +135,20 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
     // then call PF_ADD_PARAM(in_data, -1, &def), so one is declared here and
     // cleared before each control. Supervised controls set def.flags beforehand.
     PF_ParamDef def;
+    A_long topicId = 1;
+    bool haveGroup = false;
+    host::Group curGroup{};
     for (const host::ParamInfo& p : host::catalog()) {
+        // Open a collapsible topic at each group boundary (closing the previous
+        // one first). This MUST mirror paramLayout()'s grouping rule so the AE
+        // parameter indices used elsewhere stay in sync.
+        if (!haveGroup || p.group != curGroup) {
+            if (haveGroup) { AEFX_CLR_STRUCT(def); PF_END_TOPIC(topicId++); }
+            AEFX_CLR_STRUCT(def);
+            PF_ADD_TOPIC(host::groupName(p.group), topicId++);
+            curGroup = p.group;
+            haveGroup = true;
+        }
         AEFX_CLR_STRUCT(def);
         switch (p.type) {
             case host::ParamType::Float:
@@ -141,7 +193,8 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
             case host::ParamType::Group:  break;
         }
     }
-    out_data->num_params = (A_long)host::catalog().size() + 1;  // +1 for the input layer
+    if (haveGroup) { AEFX_CLR_STRUCT(def); PF_END_TOPIC(topicId++); }
+    out_data->num_params = paramLayout().total + 1;  // controls + topics + input layer
     return err;
 }
 
@@ -202,7 +255,7 @@ ParamSnapshot buildSnapshot(PF_InData* in_data) {
 
         PF_ParamDef def;
         AEFX_CLR_STRUCT(def);
-        PF_Err err = PF_CHECKOUT_PARAM(in_data, (A_long)(i + 1), in_data->current_time,
+        PF_Err err = PF_CHECKOUT_PARAM(in_data, paramLayout().aeIndex[i], in_data->current_time,
                                        in_data->time_step, in_data->time_scale, &def);
         if (err) continue;
 
@@ -271,7 +324,7 @@ void applyParamsFromSnapshot(PF_ParamDef* params[], const ParamSnapshot& snap,
         if (p.id == "preset.select") continue;                 // don't clobber the selector
         if (onlyGroup && p.group != *onlyGroup) continue;
 
-        PF_ParamDef* pd = params[i + 1];
+        PF_ParamDef* pd = params[paramLayout().aeIndex[i]];
         auto it = kv.find(p.id);
         switch (p.type) {
             case host::ParamType::Bool:
@@ -308,9 +361,11 @@ void applyParamsFromSnapshot(PF_ParamDef* params[], const ParamSnapshot& snap,
 PF_Err UserChangedParam(PF_InData* in_data, PF_OutData* out_data, PF_ParamDef* params[],
                         const PF_UserChangedParamExtra* extra) {
     const auto& cat = host::catalog();
-    const A_long idx = extra->param_index;   // 1-based (index 0 is the input layer)
-    const std::size_t ci = (std::size_t)(idx - 1);
-    if (idx < 1 || ci >= cat.size()) return PF_Err_NONE;
+    const ParamLayout& L = paramLayout();
+    const A_long idx = extra->param_index;   // AE index (0 is the input layer)
+    if (idx < 1 || (std::size_t)idx >= L.catalogOf.size()) return PF_Err_NONE;
+    const int ci = L.catalogOf[idx];
+    if (ci < 0) return PF_Err_NONE;          // a group-marker param, not a control
     const std::string& id = cat[ci].id;
 
     if (id == "preset.select") {
