@@ -15,4 +15,4 @@
 #define PDP_MINOR_VERSION 0
 #define PDP_BUG_VERSION   0
 #define PDP_STAGE_VERSION PF_Stage_DEVELOP
-#define PDP_BUILD_VERSION 1
+#define PDP_BUILD_VERSION 2   // bump on any parameter-layout change (project conversion)

@@ -20,6 +20,7 @@
 #include "entry.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -54,6 +55,19 @@ int refreshIndexFromHz(double hz) {
     return best;
 }
 A_u_char to255(float f) { f = f < 0 ? 0 : (f > 1 ? 1 : f); return (A_u_char)(f * 255.0f + 0.5f); }
+
+// Stable, unique AE parameter ID (def.uu.id) derived from a string key. After
+// Effects matches a saved project's stored values to the plugin's parameters by
+// this ID, so it MUST stay constant for a given control across plugin versions
+// (never positional). FNV-1a folded to a positive, non-zero value. The keys are
+// the catalog ids (e.g. "display.pixelSize") and "group:"/"groupend:" + name for
+// topics, all of which are stable regardless of panel order or additions.
+A_long stableId(const std::string& key) {
+    std::uint32_t h = 2166136261u;
+    for (unsigned char c : key) { h ^= c; h *= 16777619u; }
+    A_long id = (A_long)(h & 0x7FFFFFFFu);
+    return id ? id : 1;  // 0 means "no id" to AE, so avoid it
+}
 
 // AE assigns a parameter index to every control AND to each PF_ADD_TOPIC /
 // PF_END_TOPIC group marker. ParamsSetup opens a collapsible topic at every
@@ -135,33 +149,38 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
     // then call PF_ADD_PARAM(in_data, -1, &def), so one is declared here and
     // cleared before each control. Supervised controls set def.flags beforehand.
     PF_ParamDef def;
-    A_long topicId = 1;
     bool haveGroup = false;
     host::Group curGroup{};
     for (const host::ParamInfo& p : host::catalog()) {
         // Open a collapsible topic at each group boundary (closing the previous
         // one first). This MUST mirror paramLayout()'s grouping rule so the AE
-        // parameter indices used elsewhere stay in sync.
+        // parameter indices used elsewhere stay in sync. Topic IDs are stable
+        // per group so saved projects survive layout changes.
         if (!haveGroup || p.group != curGroup) {
-            if (haveGroup) { AEFX_CLR_STRUCT(def); PF_END_TOPIC(topicId++); }
+            const std::string gname = host::groupName(p.group);
+            if (haveGroup) {
+                AEFX_CLR_STRUCT(def);
+                PF_END_TOPIC(stableId("groupend:" + std::string(host::groupName(curGroup))));
+            }
             AEFX_CLR_STRUCT(def);
-            PF_ADD_TOPIC(host::groupName(p.group), topicId++);
+            PF_ADD_TOPIC(gname.c_str(), stableId("group:" + gname));
             curGroup = p.group;
             haveGroup = true;
         }
         AEFX_CLR_STRUCT(def);
+        const A_long pid = stableId(p.id);   // stable, unique per control
         switch (p.type) {
             case host::ParamType::Float:
                 PF_ADD_FLOAT_SLIDERX(p.label.c_str(), p.minValue, p.maxValue, p.minValue,
                                      p.maxValue, p.defaultValue, PF_Precision_THOUSANDTHS,
-                                     0, 0, 0);
+                                     0, 0, pid);
                 break;
             case host::ParamType::Int:
                 PF_ADD_SLIDER(p.label.c_str(), (A_long)p.minValue, (A_long)p.maxValue,
-                              (A_long)p.minValue, (A_long)p.maxValue, (A_long)p.defaultValue, 0);
+                              (A_long)p.minValue, (A_long)p.maxValue, (A_long)p.defaultValue, pid);
                 break;
             case host::ParamType::Bool:
-                PF_ADD_CHECKBOX(p.label.c_str(), "", (A_long)p.defaultValue != 0, 0, 0);
+                PF_ADD_CHECKBOX(p.label.c_str(), "", (A_long)p.defaultValue != 0, 0, pid);
                 break;
             case host::ParamType::Enum: {
                 std::string menu;
@@ -170,23 +189,26 @@ PF_Err ParamsSetup(PF_InData* in_data, PF_OutData* out_data) {
                     menu += p.options[i].label;
                 }
                 PF_ADD_POPUP(p.label.c_str(), (A_long)p.options.size(),
-                             (A_long)p.defaultValue + 1, menu.c_str(), 0);
+                             (A_long)p.defaultValue + 1, menu.c_str(), pid);
                 break;
             }
-            case host::ParamType::Color:  PF_ADD_COLOR(p.label.c_str(), 0, 0, 0, 0); break;
+            case host::ParamType::Color:  PF_ADD_COLOR(p.label.c_str(), 0, 0, 0, pid); break;
             case host::ParamType::Button: {
                 // The banner action reads "Make It Old"; per-group resets read
                 // "Reset"; any other button reads "Apply".
                 const char* btnText = p.id == "makeItOld"          ? "Make It Old"
                                     : p.id.rfind("reset.", 0) == 0 ? "Reset"
                                                                    : "Apply";
-                PF_ADD_BUTTON(p.label.c_str(), btnText, 0, PF_ParamFlag_SUPERVISE, 0);
+                PF_ADD_BUTTON(p.label.c_str(), btnText, 0, PF_ParamFlag_SUPERVISE, pid);
                 break;
             }
             case host::ParamType::Group:  break;
         }
     }
-    if (haveGroup) { AEFX_CLR_STRUCT(def); PF_END_TOPIC(topicId++); }
+    if (haveGroup) {
+        AEFX_CLR_STRUCT(def);
+        PF_END_TOPIC(stableId("groupend:" + std::string(host::groupName(curGroup))));
+    }
     out_data->num_params = paramLayout().total + 1;  // controls + topics + input layer
     return err;
 }

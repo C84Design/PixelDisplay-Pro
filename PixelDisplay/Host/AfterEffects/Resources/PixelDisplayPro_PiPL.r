@@ -57,11 +57,11 @@ resource 'PiPL' (16000) {
         },
         /* [8] Folded version integer. Rez already defines PF_VERSION differently
          * from the C macro, so the value is written as a literal to match what
-         * GlobalSetup() computes: PF_VERSION(1, 0, 0, PF_Stage_DEVELOP, 1) =
-         * (1<<19) | (0<<15) | (0<<11) | (0<<9) | 1 = 524289. Keep in sync with
-         * PixelDisplayPro_Version.h. */
+         * GlobalSetup() computes: PF_VERSION(1, 0, 0, PF_Stage_DEVELOP, 2) =
+         * (1<<19) | (0<<15) | (0<<11) | (0<<9) | 2 = 524290. Keep in sync with
+         * PixelDisplayPro_Version.h (bump both on any parameter-layout change). */
         AE_Effect_Version {
-            524289
+            524290
         },
         /* [9] */
         AE_Effect_Info_Flags {
