@@ -67,16 +67,18 @@ resource 'PiPL' (16000) {
         AE_Effect_Info_Flags {
             0
         },
-        /* [10] global out-flags — keep in sync with GlobalSetup() */
+        /* [10] Global out-flags as literal integers — Rez does not know the
+         * PF_OutFlag_* names (they live in AE_Effect.h). These MUST equal what
+         * GlobalSetup() sets from the named constants:
+         *   OutFlags   = DEEP_COLOR_AWARE (1<<25) | PIX_INDEPENDENT (1<<10)
+         *              | NON_PARAM_VARY (1<<2)                       = 33555460
+         *   OutFlags_2 = SUPPORTS_SMART_RENDER (1<<10) | FLOAT_COLOR_AWARE (1<<12)
+         *              | SUPPORTS_THREADED_RENDERING (1<<27)         = 134222848 */
         AE_Effect_Global_OutFlags {
-            PF_OutFlag_DEEP_COLOR_AWARE |
-            PF_OutFlag_PIX_INDEPENDENT |
-            PF_OutFlag_NON_PARAM_VARY
+            33555460
         },
         AE_Effect_Global_OutFlags_2 {
-            PF_OutFlag2_SUPPORTS_SMART_RENDER |
-            PF_OutFlag2_FLOAT_COLOR_AWARE |
-            PF_OutFlag2_SUPPORTS_THREADED_RENDERING
+            134222848
         },
         /* [11] */
         AE_Effect_Match_Name {
